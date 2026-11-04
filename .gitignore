@@ -1,0 +1,17 @@
+node_modules
+dist
+.output
+.vercel
+.tanstack
+.grok
+artifacts
+screenshots
+attachments
+.project_id
+*.log
+.env
+.env.*
+.DS_Store
+progetto/
+
+src/lib/pacchetto-github.server.ts

@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+@theme {
+  --color-abyss: #050d12;
+  --color-deep: #0c1a22;
+  --color-surface: #173242;
+  --color-line: rgb(255 255 255 / 36%);
+  --color-foam: #f4f1ea;
+  --color-mist: #d5e2e8;
+  --color-brass: #e8b86d;
+  --color-amber: #3a2e14;
+  --color-lagoon: #5eead4;
+  --color-lagoon-2: #5eead4;
+  --color-tide: #1f8f84;
+  --color-danger: #e07a5f;
+  --color-danger-soft: #e07a5f;
+  --color-paper: #f7f1e6;
+  --color-paper-2: #fffaf2;
+  --color-ink: #07141a;
+  --color-ink-soft: #5c6762;
+  --color-rule: #e2d8c8;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --radius-card: 1.25rem;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-family: var(--font-sans);
+    background: var(--color-abyss);
+    color: var(--color-foam);
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background:
+      radial-gradient(ellipse 90% 28% at 50% -12%, rgb(94 234 212 / 0.09), transparent 62%),
+      var(--color-abyss);
+    color: var(--color-foam);
+  }
+  button:not(:disabled),
+  a,
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgb(94 234 212 / 0.35);
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  button:not(:disabled):active,
+  a:active,
+  [role="button"]:not(:disabled):active {
+    transform: scale(0.96);
+    opacity: 0.72;
+  }
+  .leaflet-container :is(a, button):active {
+    transform: none;
+    opacity: 1;
+  }
+  h1 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  h2, h3 {
+    font-family: var(--font-sans);
+    text-wrap: balance;
+    font-weight: 500;
+  }
+  p { text-wrap: pretty; }
+  input, select, textarea {
+    font: inherit;
+    font-size: 16px;
+  }
+  :is(a, button).bg-lagoon {
+    color: var(--color-ink);
+  }
+  :is(a, button).border-line {
+    border-color: rgb(255 255 255 / 48%);
+    color: var(--color-foam);
+  }
+  html.chiara {
+    color-scheme: light;
+    --color-abyss: #f4f7f5;
+    --color-deep: #e6eeea;
+    --color-surface: #ffffff;
+    --color-line: rgb(16 32 40 / 16%);
+    --color-foam: #122028;
+    --color-mist: #4e6168;
+    --color-brass: #8a5610;
+    --color-amber: #f4e7c8;
+    --color-lagoon: #0f766e;
+    --color-lagoon-2: #0f766e;
+    --color-tide: #0f766e;
+    --color-danger: #b42318;
+    --color-danger-soft: #b42318;
+    --color-ink: #122028;
+  }
+  html.chiara body {
+    background:
+      radial-gradient(ellipse 90% 28% at 50% -12%, rgb(15 118 110 / 0.12), transparent 62%),
+      var(--color-abyss);
+  }
+  html.chiara :is(a, button).border-line {
+    border-color: rgb(16 32 40 / 22%);
+    color: var(--color-foam);
+  }
+  @keyframes smile-in {
+    from { opacity: 0; transform: scale(1.08); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes smile-up {
+    from { opacity: 0; transform: translateY(32px); }
+    to { opacity: 1; transform: none; }
+  }
+  .smile-in { animation: smile-in 0.8s ease both; }
+  .smile-up { animation: smile-up 0.7s 0.12s ease both; }
+}
+
+@media print {
+  html, body { background: white !important; color: black !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .print-table { display: table !important; }
+  .lista-skipper { display: none !important; }
+  body.stampa-lista .lista-skipper { display: block !important; }
+  body.stampa-lista .paper { display: none !important; }
+  body.stampa-lista .print-only:not(.lista-skipper) { display: none !important; }
+  .screen-cards { display: none !important; }
+  .paper {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: none !important;
+  }
+  .passo-nascosto { display: block !important; }
+  .firma-ink {
+    background: #fff !important;
+    filter: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { margin: 12mm; }
+}
+
+.print-only { display: none; }
+
+html.chiara :is(a, button, label).bg-lagoon,
+html.chiara :is(a, button).bg-tide {
+  color: #f7fffc;
+}
+
+@media print {
+  .plan-sheet,
+  .plan-sheet * {
+    color: #1c2422 !important;
+    background: white !important;
+    border-color: #d5d0c6 !important;
+  }
+}
+
+.leaflet-container img {
+  max-width: none;
+  max-height: none;
+}

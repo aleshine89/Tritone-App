@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "me.grok.divinghub.twa",
+      "sha256_cert_fingerprints": [
+        "7A:51:FA:E7:0D:56:DE:C1:A3:18:0A:66:69:66:3F:D0:89:4C:FF:C5:F8:84:26:EB:2F:C8:1C:30:A2:CC:56:D6"
+      ]
+    }
+  }
+]

@@ -1,0 +1,195 @@
+raggruppamento,nome_comune,nome_scientifico,dove_vive,cosa_mangia,dove_avvistarlo,dimorfismo_sessuale,dimensioni,curiosita
+Mammalia,Balenottera comune,Balaenoptera physalus,Oceani temperati e polari,Krill e piccoli pesci,Al largo in acque profonde,Femmine più grandi dei maschi,Fino a 27 m,Secondo animale più grande del pianeta
+Mammalia,Balenottera minore,Balaenoptera acutorostrata,Oceani di tutto il mondo,Krill e piccoli pesci,Acque costiere e al largo,Femmine leggermente più grandi,Fino a 10 m,La più piccola delle balenottere
+Mammalia,Capodoglio,Physeter macrocephalus,Oceani profondi di tutto il mondo,Calamari e pesci di profondità,Al largo in zone di canyon,Maschi molto più grandi,Fino a 20 m,Può immergersi oltre 2000 m
+Mammalia,Megattera,Megaptera novaeangliae,Oceani di tutto il mondo,Krill e piccoli pesci,Zone di alimentazione e riproduzione,Femmine più grandi,Fino a 16 m,Nota per i canti e i salti
+Mammalia,Orca,Orcinus orca,Oceani di tutto il mondo,Pesci mammiferi e squali,Acque costiere e al largo,Maschi con pinna dorsale più alta,Fino a 9 m,Caccia in gruppo
+Mammalia,Delfino comune,Delphinus delphis,Oceani temperati e tropicali,Pesci e calamari,Al largo in branchi,Maschi leggermente più grandi,Fino a 2,5 m,Molto sociale
+Mammalia,Tursiope,Tursiops truncatus,Acque costiere di tutto il mondo,Pesci e cefalopodi,Vicino a costa e porti,Maschi più grandi,Fino a 4 m,Il delfino più conosciuto
+Mammalia,Stenella striata,Stenella coeruleoalba,Oceani temperati e tropicali,Pesci e calamari,Al largo,Differenze minime,Fino a 2,5 m,Strisce laterali caratteristiche
+Mammalia,Globicefalo,Globicephala melas,Oceani temperati,Calamari,Al largo in gruppi,Maschi più grandi,Fino a 6 m,Forma gruppi stabili
+Mammalia,Foca monaca,Monachus monachus,Mediterraneo e Atlantico orientale,Pesci e cefalopodi,Grotte costiere,Maschi più grandi,Fino a 2,8 m,Specie a rischio
+Mammalia,Otaria della California,Zalophus californianus,Coste del Pacifico americano,Pesci e calamari,Scogliere e isole,Maschi con criniera,Fino a 2,5 m,Molto vocale
+Mammalia,Elefante marino,Mirounga leonina,Oceano Australe,Pesci e calamari,Spiagge di riproduzione,Maschi enormemente più grandi,Maschi fino a 6 m,Il più grande pinnipede
+Mammalia,Lamantino,Trichechus manatus,Acque costiere e fiumi tropicali,Piante acquatiche,Acque basse e calme,Differenze minime,Fino a 4 m,Erbivoro
+Reptilia,Tartaruga caretta,Caretta caretta,Oceani temperati e tropicali,Meduse crostacei e molluschi,Acque costiere e aperte,Maschi con coda più lunga,Fino a 1 m di carapace,Nidifica sulle spiagge
+Reptilia,Tartaruga verde,Chelonia mydas,Oceani tropicali e subtropicali,Alghe e piante marine,Praterie di fanerogame,Maschi con coda più lunga,Fino a 1,2 m,Erbivora da adulta
+Reptilia,Tartaruga liuto,Dermochelys coriacea,Oceani di tutto il mondo,Meduse,Acque aperte,Maschi con coda più lunga,Fino a 2 m,La più grande tartaruga marina
+Reptilia,Tartaruga embricata,Eretmochelys imbricata,Barriere coralline tropicali,Spugne,Barriere coralline,Maschi con coda più lunga,Fino a 90 cm,Becco a uncino
+Reptilia,Serpente di mare,Hydrophis platurus,Oceano Pacifico e Indiano,Pesci,Superficie in acque aperte,Differenze minime,Fino a 80 cm,Velenoso
+Reptilia,Iguana marina,Amblyrhynchus cristatus,Isole Galápagos,Alghe,Scogliere e coste,Maschi più grandi e colorati,Fino a 1,5 m,Unica iguana marina
+Aves,Pinguino imperatore,Aptenodytes forsteri,Antartide,Pesci e krill,Ghiaccio e coste,Maschi incubano l’uovo,Fino a 1,2 m,Il più grande pinguino
+Aves,Pinguino di Magellano,Spheniscus magellanicus,Coste del Sud America,Pesci,Colonizzazioni costiere,Differenze minime,Fino a 70 cm,Nidifica in tane
+Aves,Albatros urlatore,Diomedea exulans,Oceano Australe,Calamari e pesci,Al largo,Maschi leggermente più grandi,Apertura alare fino a 3,5 m,Vola per anni senza terra
+Aves,Cormorano,Phalacrocorax carbo,Coste e laghi,Pesci,Scogliere e porti,Differenze minime,Fino a 1 m,Si asciuga con le ali aperte
+Aves,Marangone dal ciuffo,Gulosus aristotelis,Mediterraneo e Atlantico,Pesci,Scogliere,Differenze minime,Fino a 80 cm,Più piccolo del cormorano
+Aves,Gabbiano reale,Larus michahellis,Mediterraneo e Atlantico,Pesci rifiuti e invertebrati,Porti e coste,Differenze minime,Fino a 60 cm,Molto comune
+Aves,Sula,Morus bassanus,Atlantico settentrionale,Pesci,Scogliere,Differenze minime,Fino a 1 m,Si tuffa da grande altezza
+Actinopterygii,Tonno rosso,Thunnus thynnus,Atlantico e Mediterraneo,Pesci e calamari,Acque aperte,Differenze minime,Fino a 3 m,Specie pregiata
+Actinopterygii,Tonno pinna gialla,Thunnus albacares,Oceani tropicali,Pesci e calamari,Acque aperte,Differenze minime,Fino a 2 m,Pinne gialle
+Actinopterygii,Orata,Sparus aurata,Mediterraneo e Atlantico orientale,Molluschi e crostacei,Fondali sabbiosi e rocciosi,Ermafrodita proterandrico,Fino a 70 cm,Cambia sesso
+Actinopterygii,Dentice,Dentex dentex,Mediterraneo,Pesci e cefalopodi,Fondali rocciosi,Maschi più grandi,Fino a 1 m,Predatore
+Actinopterygii,Cernia bruna,Epinephelus marginatus,Mediterraneo e Atlantico,Pesci e crostacei,Fondali rocciosi e grotte,Ermafrodita proterogino,Fino a 1,5 m,Specie protetta in molte zone
+Actinopterygii,Sarago maggiore,Diplodus sargus,Mediterraneo,Alghe molluschi e crostacei,Fondali rocciosi,Differenze minime,Fino a 45 cm,Molto comune
+Actinopterygii,Sarago fasciato,Diplodus vulgaris,Mediterraneo,Invertebrati,Fondali rocciosi,Differenze minime,Fino a 40 cm,Bande nere
+Actinopterygii,Murena,Muraena helena,Mediterraneo,Pesci e cefalopodi,Grotte e anfratti,Differenze minime,Fino a 1,5 m,Morde se provocata
+Actinopterygii,Pesce pagliaccio,Amphiprion ocellaris,Indo-Pacifico,Alghe e piccoli invertebrati,Anemoni,Maschio più piccolo,Fino a 11 cm,Vive in simbiosi con l’anemone
+Actinopterygii,Pesce angelo,Pomacanthus imperator,Indo-Pacifico,Spugne e alghe,Barriere coralline,Differenze minime,Fino a 40 cm,Colori vivaci
+Actinopterygii,Barracuda,Sphyraena barracuda,Oceani tropicali,Pesci,Acque aperte e barriere,Differenze minime,Fino a 2 m,Predatore veloce
+Actinopterygii,Ricciola,Seriola dumerili,Oceani temperati e tropicali,Pesci,Acque aperte,Differenze minime,Fino a 1,9 m,Molto ricercata
+Actinopterygii,Spigola,Dicentrarchus labrax,Mediterraneo e Atlantico,Pesci e crostacei,Acque costiere,Differenze minime,Fino a 1 m,Anche in allevamento
+Actinopterygii,Triglia,Mullus surmuletus,Mediterraneo,Invertebrati di fondo,Fondali sabbiosi,Differenze minime,Fino a 40 cm,Barbigli
+Actinopterygii,Pesce pappagallo,Scarus ghobban,Indo-Pacifico e Mediterraneo,Alghe,Barriere e fondali rocciosi,Maschi più colorati,Fino a 90 cm,Becco robusto
+Actinopterygii,Pesce leone,Pterois volitans,Indo-Pacifico,Pesci e crostacei,Barriere coralline,Differenze minime,Fino a 40 cm,Spine velenose
+Actinopterygii,Scorfano,Scorpaena scrofa,Mediterraneo,Pesci e crostacei,Fondali rocciosi,Differenze minime,Fino a 50 cm,Spine velenose
+Actinopterygii,Pesce luna,Mola mola,Oceani di tutto il mondo,Meduse,Superficie in acque aperte,Differenze minime,Fino a 3 m,Il più pesante pesce osseo
+Actinopterygii,Pesce san Pietro,Zeus faber,Atlantico e Mediterraneo,Pesci,Fondali,Differenze minime,Fino a 90 cm,Macchia nera sul fianco
+Actinopterygii,Castagnola,Chromis chromis,Mediterraneo,Plancton,Fondali rocciosi,Differenze minime,Fino a 15 cm,Molto numerosa
+Actinopterygii,Donzella,Coris julis,Mediterraneo,Invertebrati,Fondali rocciosi e posidonia,Maschi e femmine diversi,Fino a 25 cm,Cambia sesso
+Actinopterygii,Tordo,Labrus viridis,Mediterraneo,Invertebrati,Fondali rocciosi,Maschi più colorati,Fino a 45 cm,Verde brillante
+Chondrichthyes,Squalo bianco,Carcharodon carcharias,Oceani temperati,Mammiferi e pesci,Acque costiere e aperte,Femmine più grandi,Fino a 6 m,Predatore apicale
+Chondrichthyes,Squalo pinna bianca,Triaenodon obesus,Barriere coralline tropicali,Pesci e cefalopodi,Barriere e grotte,Differenze minime,Fino a 2 m,Riposa sul fondo
+Chondrichthyes,Verdesca,Prionace glauca,Oceani di tutto il mondo,Pesci e calamari,Acque aperte,Differenze minime,Fino a 4 m,Molto comune al largo
+Chondrichthyes,Squalo mako,Isurus oxyrinchus,Oceani temperati e tropicali,Pesci,Acque aperte,Differenze minime,Fino a 4 m,Il più veloce
+Chondrichthyes,Squalo toro,Carcharias taurus,Acque costiere temperate,Pesci,Fondali sabbiosi e grotte,Differenze minime,Fino a 3,2 m,Aspetto minaccioso
+Chondrichthyes,Squalo martello,Sphyrna lewini,Oceani tropicali,Pesci e razze,Acque costiere,Differenze minime,Fino a 4 m,Testa a martello
+Chondrichthyes,Squalo nutrice,Ginglymostoma cirratum,Barriere tropicali,Invertebrati e pesci,Fondali e grotte,Differenze minime,Fino a 4 m,Riposa di giorno
+Chondrichthyes,Razza,Raja clavata,Atlantico e Mediterraneo,Crostacei e pesci,Fondali sabbiosi,Maschi con pterigopodi,Fino a 1 m,Spine sul dorso
+Chondrichthyes,Manta,Mobula birostris,Oceani tropicali,Plancton,Acque aperte e cleaning station,Differenze minime,Fino a 7 m di apertura,La più grande razza
+Chondrichthyes,Aquila di mare,Myliobatis aquila,Mediterraneo,Molluschi,Fondali sabbiosi,Differenze minime,Fino a 1,5 m,Spine velenose
+Chondrichthyes,Chimera,Chimaera monstrosa,Acque profonde dell’Atlantico,Invertebrati,Fondali profondi,Maschi con clasper,Fino a 1,5 m,Parente di squali e razze
+Agnati,Missina,Myxine glutinosa,Fondali profondi dell’Atlantico,Carogne,Fondali fangosi,Ermafrodita,Fino a 80 cm,Produce muco
+Agnati,Lampreda marina,Petromyzon marinus,Atlantico e fiumi,Fluidi di pesci,Fiumi e coste,Differenze minime,Fino a 1 m,Parassita
+Cephalopoda,Polpo,Octopus vulgaris,Mediterraneo e Atlantico,Crostacei e molluschi,Fondali rocciosi e grotte,Differenze minime,Fino a 1 m di braccia,Molto intelligente
+Cephalopoda,Seppia,Sepia officinalis,Mediterraneo e Atlantico,Crostacei e pesci,Fondali sabbiosi,Maschi con braccia modificate,Fino a 45 cm,Cambia colore
+Cephalopoda,Calamaro,Loligo vulgaris,Mediterraneo e Atlantico,Pesci e crostacei,Acque aperte,Differenze minime,Fino a 40 cm,Nuota in branchi
+Cephalopoda,Totano,Todarodes sagittatus,Atlantico e Mediterraneo,Pesci,Acque aperte,Differenze minime,Fino a 75 cm,Predatore
+Cephalopoda,Nautilo,Nautilus pompilius,Indo-Pacifico profondo,Crostacei e carogne,Fondali profondi,Differenze minime,Fino a 20 cm di conchiglia,Conchiglia a camere
+Gastropoda,Flabellina,Flabellina affinis,Mediterraneo,Idroidi,Fondali rocciosi,Differenze minime,Fino a 5 cm,Nudibranco viola
+Gastropoda,Cratena,Cratena peregrina,Mediterraneo,Idroidi,Fondali rocciosi,Differenze minime,Fino a 5 cm,Nudibranco comune
+Gastropoda,Felimare,Felimare picta,Mediterraneo,Spugne,Fondali rocciosi,Differenze minime,Fino a 10 cm,Colori variabili
+Gastropoda,Lepre di mare,Aplysia depilans,Mediterraneo,Alghe,Fondali e posidonia,Differenze minime,Fino a 30 cm,Rilascia inchiostro
+Gastropoda,Patella,Patella caerulea,Mediterraneo,Alghe,Scogliere intertidali,Differenze minime,Fino a 5 cm,Si attacca alle rocce
+Gastropoda,Ciprea,Luria lurida,Mediterraneo,Spugne e alghe,Fondali rocciosi,Differenze minime,Fino a 6 cm,Conchiglia lucida
+Bivalvia,Cozza,Mytilus galloprovincialis,Mediterraneo,Plancton,Scogliere e boe,Differenze minime,Fino a 10 cm,Filtra l’acqua
+Bivalvia,Vongola,Ruditapes decussatus,Mediterraneo e Atlantico,Plancton,Fondali sabbiosi,Differenze minime,Fino a 7 cm,Infossata
+Bivalvia,Ostrica,Ostrea edulis,Atlantico e Mediterraneo,Plancton,Fondali rocciosi,Ermafrodita,Fino a 15 cm,Forma banchi
+Bivalvia,Capasanta,Pecten jacobaeus,Mediterraneo,Plancton,Fondali sabbiosi,Differenze minime,Fino a 15 cm,Nuota chiudendo le valve
+Bivalvia,Pinna nobile,Pinna nobilis,Mediterraneo,Plancton,Praterie di posidonia,Differenze minime,Fino a 1 m,Specie protetta
+Malacostraca,Granchio comune,Carcinus aestuarii,Mediterraneo,Detriti e piccoli animali,Fondali e porti,Maschi con chele più grandi,Fino a 8 cm,Molto comune
+Malacostraca,Aragosta,Palinurus elephas,Mediterraneo e Atlantico,Invertebrati,Fondali rocciosi,Differenze minime,Fino a 50 cm,Senza chele grandi
+Malacostraca,Astice,Homarus gammarus,Atlantico e Mediterraneo,Invertebrati e pesci,Fondali rocciosi,Maschi con chele più grandi,Fino a 60 cm,Chele potenti
+Malacostraca,Gambero,Penaeus kerathurus,Mediterraneo,Detriti e piccoli animali,Fondali sabbiosi,Differenze minime,Fino a 20 cm,Anche allevato
+Malacostraca,Scampo,Nephrops norvegicus,Atlantico e Mediterraneo,Invertebrati,Fondali fangosi,Maschi con chele più grandi,Fino a 25 cm,Vive in tane
+Malacostraca,Krill,Euphausia superba,Oceano Australe,Fitoplancton,Acque aperte,Differenze minime,Fino a 6 cm,Base della catena alimentare
+Malacostraca,Paguro,Pagurus bernhardus,Atlantico e Mediterraneo,Detriti,Fondali,Differenze minime,Fino a 10 cm,Usa conchiglie vuote
+Anthozoa,Corallo rosso,Corallium rubrum,Mediterraneo,Plancton,Grotte e fondali profondi,Differenze minime,Colonie fino a 50 cm,Specie protetta
+Anthozoa,Anemone,Anemonia viridis,Mediterraneo,Piccoli animali e simbiosi,Fondali rocciosi,Differenze minime,Fino a 20 cm,Ospita pesci
+Anthozoa,Gorgonia,Paramuricea clavata,Mediterraneo,Plancton,Fondali rocciosi profondi,Differenze minime,Colonie fino a 1 m,A ventaglio
+Anthozoa,Cerianto,Cerianthus membranaceus,Mediterraneo,Plancton,Fondali sabbiosi,Differenze minime,Fino a 40 cm,Vive in un tubo
+Scyphozoa e Hydrozoa,Medusa luminosa,Pelagia noctiluca,Mediterraneo,Plancton,Acque aperte,Differenze minime,Fino a 10 cm,Urticante
+Scyphozoa e Hydrozoa,Medusa quadrifoglio,Aurelia aurita,Oceani di tutto il mondo,Plancton,Acque costiere,Differenze minime,Fino a 40 cm,Poco urticante
+Scyphozoa e Hydrozoa,Caravella portoghese,Physalia physalis,Oceani tropicali e temperati,Pesci,Superficie,Differenze minime,Fino a 30 cm di pneumatoforo,Molto urticante
+Asteroidea,Stella marina,Marthasterias glacialis,Atlantico e Mediterraneo,Molluschi,Fondali rocciosi,Differenze minime,Fino a 70 cm,Rigenera le braccia
+Asteroidea,Stella rossa,Echinaster sepositus,Mediterraneo,Spugne e detriti,Fondali rocciosi,Differenze minime,Fino a 20 cm,Colore rosso acceso
+Echinoidea,Riccio di mare,Paracentrotus lividus,Mediterraneo,Alghe,Fondali rocciosi,Differenze minime,Fino a 7 cm,Commestibile
+Echinoidea,Riccio diadema,Diadema setosum,Indo-Pacifico,Alghe,Barriere coralline,Differenze minime,Fino a 10 cm,Spine lunghe
+Holothuroidea,Cetriolo di mare,Holothuria tubulosa,Mediterraneo,Detriti,Fondali sabbiosi,Differenze minime,Fino a 40 cm,Espelle visceri se minacciato
+Ophiuroidea,Stella serpentina,Ophiothrix fragilis,Atlantico e Mediterraneo,Detriti e plancton,Fondali rocciosi,Differenze minime,Fino a 15 cm,Braccia sottili
+Polychaeta,Spirografo,Sabella spallanzanii,Mediterraneo,Plancton,Fondali e porti,Differenze minime,Fino a 40 cm,Corona di tentacoli
+Polychaeta,Vermocane,Hermodice carunculata,Mediterraneo e Atlantico,Coralli e detriti,Fondali rocciosi,Differenze minime,Fino a 30 cm,Setole urticanti
+Poriferi,Spugna da bagno,Spongia officinalis,Mediterraneo,Filtra plancton,Fondali rocciosi,Differenze minime,Fino a 30 cm,Usata commercialmente
+Poriferi,Spugna tubolare,Aplysina aerophoba,Mediterraneo,Filtra plancton,Fondali rocciosi illuminati,Differenze minime,Fino a 20 cm,Colore giallo
+Mammalia,Balena franca australe,Eubalaena australis,Oceano Australe,Krill,Acque costiere,Femmine più grandi,Fino a 18 m,Callosità sulla testa
+Mammalia,Balena grigia,Eschrichtius robustus,Pacifico settentrionale,Invertebrati di fondo,Acque costiere,Femmine più grandi,Fino a 15 m,Migrazioni lunghissime
+Mammalia,Narvalo,Monodon monoceros,Artico,Pesci e calamari,Acque artiche,Maschi con zanna,Fino a 5 m,Zanna a spirale
+Mammalia,Beluga,Delphinapterus leucas,Artico,Pesci e invertebrati,Acque costiere artiche,Maschi più grandi,Fino a 5 m,Colore bianco
+Mammalia,Delfino di fiume,Inia geoffrensis,Amazzonia,Pesci,Fiumi,Maschi più grandi,Fino a 2,5 m,Becco lungo
+Mammalia,Leone marino,Otaria flavescens,Coste del Sud America,Pesci e calamari,Scogliere,Maschi con criniera,Fino a 2,5 m,Molto sociale
+Mammalia,Tricheco,Odobenus rosmarus,Artico,Molluschi,Ghiaccio e coste,Maschi con zanne più lunghe,Fino a 3,5 m,Zanne caratteristiche
+Reptilia,Tartaruga di Kemp,Lepidochelys kempii,Atlantico occidentale,Crostacei,Acque costiere,Maschi con coda più lunga,Fino a 70 cm,La più piccola
+Reptilia,Tartaruga olivacea,Lepidochelys olivacea,Oceani tropicali,Meduse e crostacei,Acque costiere,Maschi con coda più lunga,Fino a 70 cm,Nidifica in massa
+Aves,Pinguino africano,Spheniscus demersus,Coste del Sudafrica,Pesci,Isole e coste,Differenze minime,Fino a 70 cm,Specie minacciata
+Aves,Berta maggiore,Calonectris diomedea,Mediterraneo e Atlantico,Pesci e calamari,Al largo,Differenze minime,Fino a 55 cm,Vola basso sull’acqua
+Aves,Pulcinella di mare,Fratercula arctica,Atlantico settentrionale,Pesci,Scogliere,Differenze minime,Fino a 30 cm,Becco colorato
+Aves,Stercorario,Stercorarius skua,Atlantico settentrionale,Pesci e uova,Al largo e colonie,Differenze minime,Fino a 60 cm,Pirata di altri uccelli
+Actinopterygii,Cernia rossa,Mycteroperca rubra,Mediterraneo,Pesci,Fondali rocciosi,Ermafrodita,Fino a 80 cm,Meno comune della bruna
+Actinopterygii,Cernia di fondale,Polyprion americanus,Atlantico e Mediterraneo,Pesci e cefalopodi,Fondali profondi,Differenze minime,Fino a 2 m,Vive in profondità
+Actinopterygii,Pesce balestra,Balistes capriscus,Atlantico e Mediterraneo,Molluschi e crostacei,Fondali rocciosi,Differenze minime,Fino a 40 cm,Denti robusti
+Actinopterygii,Pesce palla,Lagocephalus lagocephalus,Oceani tropicali e Mediterraneo,Invertebrati,Acque aperte,Differenze minime,Fino a 60 cm,Tossico se mangiato
+Actinopterygii,Pesce istrice,Diodon hystrix,Oceani tropicali,Molluschi,Barriere e fondali,Differenze minime,Fino a 90 cm,Si gonfia
+Actinopterygii,Pesce chirurgo,Acanthurus chirurgus,Atlantico tropicale,Alghe,Barriere,Differenze minime,Fino a 30 cm,Spine sul peduncolo
+Actinopterygii,Pesce farfalla,Chaetodon auriga,Indo-Pacifico,Polipi e invertebrati,Barriere coralline,Differenze minime,Fino a 20 cm,Colori vivaci
+Actinopterygii,Pesce cardinale,Apogon imberbis,Mediterraneo,Piccoli crostacei,Grotte,Maschio incuba le uova,Fino a 15 cm,Rosso acceso
+Actinopterygii,Salpa,Sarpa salpa,Mediterraneo,Alghe,Praterie di posidonia,Differenze minime,Fino a 45 cm,Strisce dorate
+Actinopterygii,Boga,Boops boops,Mediterraneo,Plancton e alghe,Acque costiere,Differenze minime,Fino a 35 cm,Molto comune
+Actinopterygii,Occhiata,Oblada melanura,Mediterraneo,Invertebrati e alghe,Fondali rocciosi,Differenze minime,Fino a 30 cm,Macchia nera sulla coda
+Actinopterygii,Mormora,Lithognathus mormyrus,Mediterraneo,Invertebrati,Fondali sabbiosi,Differenze minime,Fino a 50 cm,Strisce verticali
+Actinopterygii,Pesce sciabola,Lepidopus caudatus,Atlantico e Mediterraneo,Pesci,Acque aperte,Differenze minime,Fino a 2 m,Corpo nastriforme
+Actinopterygii,Pesce spada,Xiphias gladius,Oceani di tutto il mondo,Pesci e calamari,Acque aperte,Differenze minime,Fino a 4,5 m,Rostro lungo
+Actinopterygii,Pesce vela,Istiophorus albicans,Atlantico tropicale,Pesci,Acque aperte,Differenze minime,Fino a 3 m,Pinna dorsale alta
+Actinopterygii,Cernia gigante,Epinephelus lanceolatus,Indo-Pacifico,Pesci e crostacei,Barriere e relitti,Ermafrodita,Fino a 2,7 m,Una delle cernie più grandi
+Actinopterygii,Pesce napoleone,Cheilinus undulatus,Indo-Pacifico,Molluschi e crostacei,Barriere,Maschi con gobba,Fino a 2 m,Specie protetta
+Actinopterygii,Pesce mandarino,Synchiropus splendidus,Indo-Pacifico,Piccoli invertebrati,Barriere,Maschi più colorati,Fino a 6 cm,Colori intensi
+Actinopterygii,Pesce foglia,Taenianotus triacanthus,Indo-Pacifico,Pesci,Barriere,Differenze minime,Fino a 10 cm,Si mimetizza
+Actinopterygii,Pesce pietra,Synanceia verrucosa,Indo-Pacifico,Pesci,Fondali,Differenze minime,Fino a 40 cm,Veleno potente
+Actinopterygii,Pesce rana,Antennarius commerson,Indo-Pacifico,Pesci,Barriere e fondali,Differenze minime,Fino a 30 cm,Pesca con esca
+Actinopterygii,Pesce pipistrello,Platax orbicularis,Indo-Pacifico,Alghe e invertebrati,Barriere,Differenze minime,Fino a 50 cm,Corpo alto
+Actinopterygii,Pesce unicorno,Naso lituratus,Indo-Pacifico,Alghe,Barriere,Differenze minime,Fino a 30 cm,Corna frontale
+Actinopterygii,Pesce balestra picasso,Rhinecanthus aculeatus,Indo-Pacifico,Invertebrati,Barriere,Differenze minime,Fino a 30 cm,Colori a bande
+Actinopterygii,Pesce angelo francese,Pomacanthus paru,Atlantico tropicale,Spugne,Barriere,Differenze minime,Fino a 40 cm,Giallo e nero
+Actinopterygii,Pesce pappagallo blu,Scarus coeruleus,Atlantico tropicale,Alghe,Barriere,Maschi più blu,Fino a 1,2 m,Becco potente
+Actinopterygii,Pesce trombetta,Aulostomus maculatus,Atlantico tropicale,Pesci,Barriere,Differenze minime,Fino a 1 m,Corpo allungato
+Actinopterygii,Pesce ago,Syngnathus acus,Atlantico e Mediterraneo,Piccoli crostacei,Posidonia,Maschio incuba le uova,Fino a 50 cm,Parente del cavalluccio
+Actinopterygii,Cavalluccio marino,Hippocampus hippocampus,Mediterraneo,Piccoli crostacei,Posidonia,Maschio incuba le uova,Fino a 15 cm,Specie protetta
+Actinopterygii,Cavalluccio camuso,Hippocampus guttulatus,Mediterraneo,Piccoli crostacei,Posidonia,Maschio incuba le uova,Fino a 15 cm,Muso lungo
+Actinopterygii,Pesce lanterna,Myctophum punctatum,Oceani profondi,Plancton,Acque profonde,Differenze minime,Fino a 10 cm,Bioluminescente
+Actinopterygii,Pesce vipera,Chauliodus sloani,Oceani profondi,Pesci,Acque profonde,Differenze minime,Fino a 30 cm,Denti lunghi
+Chondrichthyes,Squalo tigre,Galeocerdo cuvier,Oceani tropicali,Pesci tartarughe e mammiferi,Acque costiere,Differenze minime,Fino a 5 m,Onnivoro
+Chondrichthyes,Squalo leopardo,Triakis semifasciata,Pacifico orientale,Pesci e invertebrati,Fondali sabbiosi,Differenze minime,Fino a 2 m,Macchie
+Chondrichthyes,Squalo zebra,Stegostoma tigrinum,Indo-Pacifico,Molluschi,Fondali sabbiosi,Differenze minime,Fino a 3,5 m,Macchie da adulto
+Chondrichthyes,Squalo balena,Rhincodon typus,Oceani tropicali,Plancton,Acque aperte,Differenze minime,Fino a 18 m,Il più grande pesce
+Chondrichthyes,Squalo elefante,Cetorhinus maximus,Oceani temperati,Plancton,Acque aperte,Differenze minime,Fino a 10 m,Filtra l’acqua
+Chondrichthyes,Squalo martello maggiore,Sphyrna mokarran,Oceani tropicali,Razze e pesci,Acque costiere,Differenze minime,Fino a 6 m,Il più grande martello
+Chondrichthyes,Squalo volpe,Alopias vulpinus,Oceani temperati,Pesci,Acque aperte,Differenze minime,Fino a 6 m,Coda lunghissima
+Chondrichthyes,Squalo grigio di barriera,Carcharhinus amblyrhynchos,Barriere indo-pacifiche,Pesci,Barriere,Differenze minime,Fino a 2,5 m,Comune in barriera
+Chondrichthyes,Squalo pinna nera,Carcharhinus melanopterus,Barriere tropicali,Pesci,Acque basse,Differenze minime,Fino a 1,8 m,Pinne nere
+Chondrichthyes,Razza aquila maculata,Aetobatus narinari,Oceani tropicali,Molluschi,Fondali sabbiosi,Differenze minime,Fino a 3 m,Macchie bianche
+Chondrichthyes,Razza elettrica,Torpedo marmorata,Mediterraneo,Pesci,Fondali sabbiosi,Differenze minime,Fino a 60 cm,Scarica elettrica
+Chondrichthyes,Pesce chitarra,Rhinobatos rhinobatos,Mediterraneo,Invertebrati,Fondali sabbiosi,Differenze minime,Fino a 1,5 m,Forma intermedia
+Cephalopoda,Polpo dagli anelli blu,Hapalochlaena lunulata,Indo-Pacifico,Crostacei,Fondali e barriere,Differenze minime,Fino a 20 cm,Veleno potente
+Cephalopoda,Seppia faraona,Sepia pharaonis,Indo-Pacifico,Crostacei,Fondali sabbiosi,Maschi più grandi,Fino a 40 cm,Cambia colore
+Cephalopoda,Calamaro gigante,Architeuthis dux,Oceani profondi,Pesci e calamari,Acque profonde,Differenze minime,Fino a 13 m,Occhi enormi
+Cephalopoda,Polpo mimetico,Thaumoctopus mimicus,Indo-Pacifico,Crostacei,Fondali sabbiosi,Differenze minime,Fino a 60 cm,Imita altri animali
+Gastropoda,Nudibranco spagnolo,Flabellina iodinea,Pacifico orientale,Idroidi,Fondali rocciosi,Differenze minime,Fino a 7 cm,Viola e arancio
+Gastropoda,Nudibranco doride,Doris pseudoargus,Atlantico,Spugne,Fondali rocciosi,Differenze minime,Fino a 10 cm,Corpo bombato
+Gastropoda,Conchiglia regina,Aliger gigas,Caraibi,Alghe,Praterie,Differenze minime,Fino a 30 cm,Conchiglia grande
+Gastropoda,Murice,Hexaplex trunculus,Mediterraneo,Bivalvi,Fondali rocciosi,Differenze minime,Fino a 8 cm,Produce porpora
+Gastropoda,Natica,Neverita josephinia,Mediterraneo,Bivalvi,Fondali sabbiosi,Differenze minime,Fino a 4 cm,Predatore
+Bivalvia,Vongola verace,Ruditapes philippinarum,Mediterraneo e Pacifico,Plancton,Fondali sabbiosi,Differenze minime,Fino a 6 cm,Molto allevata
+Bivalvia,Cannolicchio,Ensis minor,Mediterraneo e Atlantico,Plancton,Fondali sabbiosi,Differenze minime,Fino a 15 cm,Si infossa rapidamente
+Bivalvia,Cuore di mare,Cerastoderma edule,Atlantico e Mediterraneo,Plancton,Fondali sabbiosi,Differenze minime,Fino a 5 cm,Commestibile
+Bivalvia,Dattero di mare,Lithophaga lithophaga,Mediterraneo,Plancton,Rocce calcaree,Differenze minime,Fino a 8 cm,Specie protetta
+Malacostraca,Granchio corridore,Pachygrapsus marmoratus,Mediterraneo,Alghe e detriti,Scogliere,Maschi con chele più grandi,Fino a 4 cm,Molto agile
+Malacostraca,Granchio reale,Paralithodes camtschaticus,Pacifico settentrionale,Invertebrati,Fondali,Maschi più grandi,Fino a 1,5 m di apertura,Pregiato
+Malacostraca,Gambero rosso,Aristaeomorpha foliacea,Mediterraneo profondo,Detriti,Fondali profondi,Differenze minime,Fino a 20 cm,Commercialmente importante
+Malacostraca,Canocchia,Squilla mantis,Mediterraneo,Pesci e crostacei,Fondali sabbiosi,Differenze minime,Fino a 20 cm,Chele potenti
+Malacostraca,Balano,Balanus perforatus,Mediterraneo,Plancton,Scogliere,Ermafrodita,Fino a 3 cm,Si attacca alle rocce
+Anthozoa,Corallo nero,Antipathella subpinnata,Mediterraneo,Plancton,Fondali profondi,Differenze minime,Colonie fino a 1 m,Scheletro nero
+Anthozoa,Anemone gioiello,Corynactis viridis,Atlantico e Mediterraneo,Plancton,Fondali rocciosi,Differenze minime,Fino a 1 cm,Colori vivaci
+Anthozoa,Madrepora,Cladocora caespitosa,Mediterraneo,Simbiosi e plancton,Fondali rocciosi,Differenze minime,Colonie fino a 50 cm,Unico corallo costruttore mediterraneo
+Anthozoa,Pennatula,Pennatula phosphorea,Atlantico e Mediterraneo,Plancton,Fondali sabbiosi,Differenze minime,Fino a 40 cm,Bioluminescente
+Scyphozoa e Hydrozoa,Medusa barile,Rhizostoma pulmo,Mediterraneo,Plancton,Acque costiere,Differenze minime,Fino a 60 cm,Poco urticante
+Scyphozoa e Hydrozoa,Cubomedusa,Chironex fleckeri,Indo-Pacifico,Pesci,Acque costiere,Differenze minime,Fino a 30 cm,Molto pericolosa
+Scyphozoa e Hydrozoa,Velella,Velella velella,Oceani temperati,Plancton,Superficie,Differenze minime,Fino a 7 cm,Colonia galleggiante
+Asteroidea,Stella corona di spine,Acanthaster planci,Indo-Pacifico,Coralli,Barriere,Differenze minime,Fino a 50 cm,Può danneggiare le barriere
+Asteroidea,Stella cuscino,Culcita novaeguineae,Indo-Pacifico,Coralli e detriti,Barriere,Differenze minime,Fino a 30 cm,Forma gonfia
+Echinoidea,Riccio matita,Heterocentrotus mamillatus,Indo-Pacifico,Alghe,Barriere,Differenze minime,Fino a 10 cm,Spine spesse
+Echinoidea,Dollaro di sabbia,Clypeaster rosaceus,Atlantico tropicale,Detriti,Fondali sabbiosi,Differenze minime,Fino a 15 cm,Forma piatta
+Holothuroidea,Cetriolo di mare nero,Holothuria forskali,Mediterraneo,Detriti,Fondali,Differenze minime,Fino a 25 cm,Espelle tubuli
+Holothuroidea,Cetriolo di mare leopardo,Bohadschia argus,Indo-Pacifico,Detriti,Fondali sabbiosi,Differenze minime,Fino a 40 cm,Macchie
+Ophiuroidea,Stella serpentina nera,Ophiocomina nigra,Atlantico e Mediterraneo,Detriti,Fondali rocciosi,Differenze minime,Fino a 15 cm,Colore scuro
+Polychaeta,Verme di fuoco,Eurythoe complanata,Oceani tropicali,Detriti,Fondali rocciosi,Differenze minime,Fino a 20 cm,Setole urticanti
+Polychaeta,Verme albero di Natale,Spirobranchus giganteus,Barriere tropicali,Plancton,Coralli,Differenze minime,Fino a 5 cm di corona,Corona colorata
+Poriferi,Spugna barile,Xestospongia muta,Caraibi,Filtra plancton,Barriere,Differenze minime,Fino a 2 m,Molto grande
+Poriferi,Spugna rossa,Crambe crambe,Mediterraneo,Filtra plancton,Fondali rocciosi,Differenze minime,Fino a 20 cm,Colore rosso acceso
