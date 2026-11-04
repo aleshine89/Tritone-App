@@ -4825,14 +4825,18 @@ function citaTabella(table: string) {
   return `"${table}"`;
 }
 
-async function leggiTabella(sql: Sql, table: string): Promise<{ [key: string]: string | number | boolean | null }[]> {
+async function leggiTabella(
+  sql: Sql,
+  table: string,
+  nascondi: Set<string> = NASCONDI_COPIA,
+): Promise<{ [key: string]: string | number | boolean | null }[]> {
   const nome = `public.${citaTabella(table)}`;
   const found = await sql<{ ok: string | null }>`select to_regclass(${nome}) as ok`;
   if (!found[0]?.ok) return [];
   const rows = await sql.query<{ r: { [key: string]: unknown } | null }>(`select to_jsonb(t) as r from ${citaTabella(table)} t`);
   return rows.map((row) => {
     const value = { ...(row.r ?? {}) };
-    for (const key of NASCONDI_COPIA) delete value[key];
+    for (const key of nascondi) delete value[key];
     const piano: { [key: string]: string | number | boolean | null } = {};
     for (const [key, item] of Object.entries(value)) {
       if (item == null) piano[key] = null;
@@ -4942,6 +4946,246 @@ export const scaricaCopiaGestore = createServerFn({ method: "POST" })
       staff: staff.map((row) => ({ userId: testoCopia(row.user_id), clubId: Number(row.club_id) || null })),
       collegamenti,
       moduli,
+    };
+  });
+
+const TABELLE_DATABASE = [
+  "user",
+  "account",
+  "profiles",
+  "club",
+  "submissions",
+  "notifications",
+  "notification_reads",
+  "brevetti",
+  "kit_personale",
+  "documenti_personali",
+  "logbook_entries",
+  "logbook_photos",
+  "logbook_voice",
+  "logbook_specie",
+  "logbook_condivisioni",
+  "scubadex_viste",
+  "scubadex_proprie",
+  "platform",
+  "staff_membri",
+  "affiliazioni",
+  "uscite",
+  "uscita_righe",
+  "uscita_gruppi",
+  "imbarcazioni",
+  "privacy_accettazioni",
+  "scheda_aperture",
+  "scheda_modifiche",
+  "guida_accettazioni",
+  "responsabilita_accettazioni",
+  "accettazioni_legali",
+  "titolare_trattamento",
+  "chiusure_scuola",
+  "avvisi_push",
+  "soci",
+  "soci_attivita",
+  "soci_attivita_iscrizioni",
+  "soci_documenti",
+  "soci_comunicazioni",
+  "soci_comunicazioni_destinatari",
+  "soci_comunicazioni_file",
+  "tool_files",
+  "checklist_voci",
+] as const;
+
+const NASCONDI_DATABASE = new Set(["accessToken", "refreshToken", "idToken", "token"]);
+
+export type DatabaseGestore = {
+  esportatoIl: string;
+  conteggi: { [tabella: string]: number };
+  tabelle: { [tabella: string]: { [key: string]: string | number | boolean | null }[] };
+};
+
+export const scaricaDatabaseGestore = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<DatabaseGestore> => {
+    const sql = await getSql();
+    await requirePlatform(sql, context.userId);
+    const tabelle: DatabaseGestore["tabelle"] = {};
+    const conteggi: DatabaseGestore["conteggi"] = {};
+    for (const nome of TABELLE_DATABASE) {
+      const righe = await leggiTabella(sql, nome, NASCONDI_DATABASE);
+      tabelle[nome] = righe;
+      conteggi[nome] = righe.length;
+    }
+    return { esportatoIl: new Date().toISOString(), conteggi, tabelle };
+  });
+
+function citaColonna(name: string) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error("Colonna non prevista.");
+  return `"${name}"`;
+}
+
+type ColonnaDatabase = { name: string; dataType: string; udt: string };
+type RigaDatabase = { [key: string]: string | number | boolean | null };
+
+function rimappaTesto(value: string, mappa: Map<string, string>): string {
+  const diretto = mappa.get(value);
+  if (diretto) return diretto;
+  const pezzo = value.trim();
+  if ((pezzo.startsWith("{") || pezzo.startsWith("[")) && pezzo.length > 2) {
+    try {
+      return JSON.stringify(rimappaJson(JSON.parse(pezzo), mappa));
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function rimappaJson(value: unknown, mappa: Map<string, string>): unknown {
+  if (typeof value === "string") return rimappaTesto(value, mappa);
+  if (Array.isArray(value)) return value.map((item) => rimappaJson(item, mappa));
+  if (value && typeof value === "object") {
+    const out: { [key: string]: unknown } = {};
+    for (const [key, item] of Object.entries(value)) out[key] = rimappaJson(item, mappa);
+    return out;
+  }
+  return value;
+}
+
+function rimappaRiga(row: RigaDatabase, mappa: Map<string, string>): RigaDatabase {
+  const out: RigaDatabase = {};
+  for (const [key, value] of Object.entries(row)) {
+    out[key] = typeof value === "string" ? rimappaTesto(value, mappa) : value;
+  }
+  return out;
+}
+
+async function colonneDatabase(sql: Sql, table: string): Promise<ColonnaDatabase[]> {
+  const rows = await sql.query<{ column_name: string; data_type: string; udt_name: string }>(
+    "select column_name, data_type, udt_name from information_schema.columns where table_schema = 'public' and table_name = $1 order by ordinal_position",
+    [table],
+  );
+  return rows.map((row) => ({ name: row.column_name, dataType: row.data_type, udt: row.udt_name }));
+}
+
+async function chiaveDatabase(sql: Sql, table: string): Promise<string[]> {
+  const rows = await sql.query<{ name: string }>(
+    `select a.attname as name
+     from pg_index i
+     join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey)
+     where i.indrelid = $1::regclass and i.indisprimary
+     order by array_position(i.indkey, a.attnum)`,
+    [`public.${citaTabella(table)}`],
+  );
+  return rows.map((row) => row.name);
+}
+
+function castDatabase(col: ColonnaDatabase) {
+  if (col.dataType === "jsonb") return "::jsonb";
+  if (col.dataType === "json") return "::json";
+  if (col.dataType === "date") return "::date";
+  if (col.dataType === "timestamp with time zone") return "::timestamptz";
+  if (col.dataType === "timestamp without time zone") return "::timestamp";
+  if (col.udt === "_text") return "::text[]";
+  return "";
+}
+
+function valoreDatabase(col: ColonnaDatabase, raw: string | number | boolean | null) {
+  if (typeof raw === "string" && raw.trim() === "" && castDatabase(col)) return null;
+  if ((col.dataType === "jsonb" || col.dataType === "json") && raw != null && typeof raw !== "string") return JSON.stringify(raw);
+  if (col.udt === "_text" && typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : raw;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+async function importaTabella(sql: Sql, table: string, righe: RigaDatabase[]) {
+  if (!righe.length) return 0;
+  const colonne = await colonneDatabase(sql, table);
+  if (!colonne.length) return 0;
+  const chiave = await chiaveDatabase(sql, table);
+  const note = new Set(colonne.map((col) => col.name));
+  let scritte = 0;
+  for (const row of righe) {
+    const usate = colonne.filter((col) => col.name in row && note.has(col.name));
+    if (!usate.length) continue;
+    const params = usate.map((col) => valoreDatabase(col, row[col.name] ?? null));
+    const values = usate.map((col, index) => `$${index + 1}${castDatabase(col)}`).join(", ");
+    const presenti = new Set(usate.map((col) => col.name));
+    const pk = chiave.filter((nome) => presenti.has(nome));
+    const aggiornabili = usate.filter((col) => !pk.includes(col.name));
+    const conflict = pk.length
+      ? aggiornabili.length
+        ? ` on conflict (${pk.map(citaColonna).join(", ")}) do update set ${aggiornabili.map((col) => `${citaColonna(col.name)} = excluded.${citaColonna(col.name)}`).join(", ")}`
+        : ` on conflict (${pk.map(citaColonna).join(", ")}) do nothing`
+      : "";
+    await sql.query(
+      `insert into ${citaTabella(table)} (${usate.map((col) => citaColonna(col.name)).join(", ")}) values (${values})${conflict}`,
+      params,
+    );
+    scritte += 1;
+  }
+  const seriali = await sql.query<{ column_name: string }>(
+    "select column_name from information_schema.columns where table_schema = 'public' and table_name = $1 and column_default like 'nextval%'",
+    [table],
+  );
+  for (const col of seriali) {
+    await sql.query(
+      `select setval(pg_get_serial_sequence($1, $2), greatest(coalesce((select max(${citaColonna(col.column_name)}) from ${citaTabella(table)}), 1), 1), true)`,
+      [`public.${table}`, col.column_name],
+    );
+  }
+  return scritte;
+}
+
+export const caricaDatabaseGestore = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const tabelle = oggettoCopia(input)?.tabelle;
+    const piano = oggettoCopia(tabelle);
+    if (!piano) throw new Error("Questo non è il file del database completo.");
+    const pulito: { [tabella: string]: RigaDatabase[] } = {};
+    for (const nome of TABELLE_DATABASE) {
+      const righe = piano[nome];
+      if (!Array.isArray(righe)) continue;
+      pulito[nome] = righe.filter((row): row is RigaDatabase => Boolean(oggettoCopia(row)));
+    }
+    if (!pulito.user && !pulito.profiles && !pulito.logbook_entries) throw new Error("Questo non è il file del database completo.");
+    return { tabelle: pulito };
+  })
+  .handler(async ({ context, data }): Promise<{ account: number; immersioni: number; foto: number }> => {
+    const sql = await getSql();
+    await requirePlatform(sql, context.userId);
+    const esistenti = await sql.query<{ id: string; email: string }>(`select "id", "email" from "user"`);
+    const perMail = new Map(esistenti.map((row) => [row.email.trim().toLowerCase(), row.id]));
+    const mappa = new Map<string, string>();
+    for (const row of data.tabelle.user ?? []) {
+      const id = testoCopia(row.id);
+      const email = testoCopia(row.email).trim().toLowerCase();
+      const gia = email ? perMail.get(email) : undefined;
+      if (id && gia && gia !== id) mappa.set(id, gia);
+    }
+    for (const nome of TABELLE_DATABASE) {
+      const origine = data.tabelle[nome];
+      if (!origine?.length) continue;
+      const righe = origine
+        .filter((row) => !(nome === "user" && mappa.has(testoCopia(row.id))))
+        .filter((row) => !(nome === "account" && mappa.has(testoCopia(row.userId))))
+        .map((row) => rimappaRiga(row, mappa));
+      try {
+        await importaTabella(sql, nome, righe);
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : "Caricamento non riuscito.";
+        throw new Error(`Caricamento fermo su ${nome}. ${message}`);
+      }
+    }
+    return {
+      account: data.tabelle.user?.length ?? data.tabelle.profiles?.length ?? 0,
+      immersioni: data.tabelle.logbook_entries?.length ?? 0,
+      foto: data.tabelle.logbook_photos?.length ?? 0,
     };
   });
 

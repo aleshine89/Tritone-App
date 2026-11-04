@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useFondale } from "@/components/app-frame";
 import { AccountGestore } from "@/components/account-gestore";
 import { ClubLogo } from "@/components/club-logo";
-import { inviaCodiceAffiliazione, listAffiliazioni, listChiusure, listRichiesteMezzo, listScuole, openOwnDiving, scaricaCopiaGestore, setScuolaStato, eliminaScuola, tieniScuola, confermaMezzoNautico, elencoAbbonamenti, confrontaModuliUtente, ripristinaModuliUtente, type Affiliazione, type ChiusuraScuola, type RichiestaMezzo, type ScuolaAffiliata, type AccountGestore as AccountRiga, type ModuloMancante } from "@/lib/fondale.functions";
+import { inviaCodiceAffiliazione, listAffiliazioni, listChiusure, listRichiesteMezzo, listScuole, openOwnDiving, scaricaCopiaGestore, scaricaDatabaseGestore, caricaDatabaseGestore, setScuolaStato, eliminaScuola, tieniScuola, confermaMezzoNautico, elencoAbbonamenti, confrontaModuliUtente, ripristinaModuliUtente, type Affiliazione, type ChiusuraScuola, type RichiestaMezzo, type ScuolaAffiliata, type AccountGestore as AccountRiga, type ModuloMancante } from "@/lib/fondale.functions";
 import { formByKey } from "@/lib/forms";
 import { formatDay } from "@/lib/format";
 import { messaggioErrore, useT, type Traduci } from "@/lib/i18n";
@@ -24,6 +24,8 @@ export function Gestione() {
   const [q, setQ] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [copiando, setCopiando] = useState(false);
+  const [database, setDatabase] = useState(false);
+  const [carico, setCarico] = useState(false);
   const [copiaNota, setCopiaNota] = useState<string | null>(null);
   const [schermo, setSchermo] = useState<"scuole" | "account">("scuole");
 
@@ -93,6 +95,61 @@ export function Gestione() {
         }}
       >
         {copiando ? t("Preparo la copia…") : t("Scarica copia")}
+      </button>
+      <label className={`ml-2 mt-4 inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line px-4 text-sm font-medium ${carico ? "opacity-60" : ""}`}>
+        {carico ? t("Carico il database…") : t("Carica database completo utenti")}
+        <input
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          disabled={carico}
+          onChange={(event) => {
+            const scelto = event.target.files?.[0];
+            event.target.value = "";
+            if (!scelto) return;
+            setCarico(true);
+            setCopiaNota(null);
+            setError(null);
+            void scelto
+              .text()
+              .then((testo) => {
+                const json = JSON.parse(testo) as unknown;
+                return caricaDatabaseGestore({ data: json });
+              })
+              .then((esito) => {
+                setCopiaNota(t("Caricati {account} account, {immersioni} immersioni e {foto} foto.", esito));
+              })
+              .catch((reason: unknown) => setError(messaggioErrore(reason, "Database non caricato.")))
+              .finally(() => setCarico(false));
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        disabled={database}
+        className="ml-2 mt-4 min-h-11 rounded-full border border-line px-4 text-sm font-medium disabled:opacity-60"
+        onClick={() => {
+          setDatabase(true);
+          setCopiaNota(null);
+          setError(null);
+          void scaricaDatabaseGestore()
+            .then((data) => {
+              const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "tritone-database.json";
+              link.click();
+              URL.revokeObjectURL(url);
+              const logbook = data.conteggi.logbook_entries ?? 0;
+              const foto = data.conteggi.logbook_photos ?? 0;
+              setCopiaNota(t("{logbook} immersioni e {foto} foto. Non include la password di Google.", { logbook, foto }));
+            })
+            .catch((reason: unknown) => setError(messaggioErrore(reason, "Database non scaricato.")))
+            .finally(() => setDatabase(false));
+        }}
+      >
+        {database ? t("Preparo il database…") : t("Scarica database")}
       </button>
       <RipristinoModuli />
       {copiaNota ? <p className="mt-2 text-sm text-mist">{copiaNota}</p> : null}
