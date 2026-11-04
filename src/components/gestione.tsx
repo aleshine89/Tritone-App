@@ -112,12 +112,58 @@ export function Gestione() {
             setError(null);
             void scelto
               .text()
-              .then((testo) => {
-                const json = JSON.parse(testo) as unknown;
-                return caricaDatabaseGestore({ data: json });
+              .then(async (testo) => {
+                const json = JSON.parse(testo) as { tabelle?: Record<string, Record<string, unknown>[]> };
+                const tabelle = json.tabelle;
+                if (!tabelle || typeof tabelle !== "object") throw new Error("Questo non è il file del database completo.");
+                const utenti = (tabelle.user ?? []).map((row) => ({ id: String(row.id ?? ""), email: String(row.email ?? "") }));
+                const ordine = [
+                  "user", "account", "profiles", "club", "submissions", "notifications", "notification_reads",
+                  "brevetti", "kit_personale", "documenti_personali", "logbook_entries", "logbook_photos", "logbook_voice",
+                  "logbook_specie", "logbook_condivisioni", "scubadex_viste", "scubadex_proprie", "platform", "staff_membri",
+                  "affiliazioni", "uscite", "uscita_righe", "uscita_gruppi", "imbarcazioni", "privacy_accettazioni",
+                  "scheda_aperture", "scheda_modifiche", "guida_accettazioni", "responsabilita_accettazioni",
+                  "accettazioni_legali", "titolare_trattamento", "chiusure_scuola", "avvisi_push", "soci",
+                  "soci_attivita", "soci_attivita_iscrizioni", "soci_documenti", "soci_comunicazioni",
+                  "soci_comunicazioni_destinatari", "soci_comunicazioni_file", "tool_files", "checklist_voci",
+                ];
+                let saltate = 0;
+                const invia = async (tabella: string, righe: Record<string, unknown>[]) => {
+                  if (!righe.length) return;
+                  if (righe.length > 1 && JSON.stringify(righe).length > 2_500_000) {
+                    const meta = Math.ceil(righe.length / 2);
+                    await invia(tabella, righe.slice(0, meta));
+                    await invia(tabella, righe.slice(meta));
+                    return;
+                  }
+                  setCopiaNota(t("Carico {tabella}…", { tabella }));
+                  try {
+                    await caricaDatabaseGestore({ data: { tabella, righe, utenti } });
+                  } catch (reason) {
+                    const message = reason instanceof Error ? reason.message : "";
+                    if (righe.length > 1) {
+                      for (const riga of righe) await invia(tabella, [riga]);
+                      return;
+                    }
+                    if (/payload|too large|entity|function|troppo/i.test(message) || !message) {
+                      saltate += 1;
+                      return;
+                    }
+                    throw reason;
+                  }
+                };
+                for (const tabella of ordine) await invia(tabella, tabelle[tabella] ?? []);
+                return {
+                  account: tabelle.user?.length ?? tabelle.profiles?.length ?? 0,
+                  immersioni: tabelle.logbook_entries?.length ?? 0,
+                  foto: Math.max(0, (tabelle.logbook_photos?.length ?? 0) - saltate),
+                  saltate,
+                };
               })
               .then((esito) => {
-                setCopiaNota(t("Caricati {account} account, {immersioni} immersioni e {foto} foto.", esito));
+                setCopiaNota(esito.saltate
+                  ? t("Caricati {account} account, {immersioni} immersioni e {foto} foto. {saltate} schede non sono entrate.", esito)
+                  : t("Caricati {account} account, {immersioni} immersioni e {foto} foto.", esito));
               })
               .catch((reason: unknown) => setError(messaggioErrore(reason, "Database non caricato.")))
               .finally(() => setCarico(false));

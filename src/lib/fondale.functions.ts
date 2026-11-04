@@ -5144,49 +5144,38 @@ async function importaTabella(sql: Sql, table: string, righe: RigaDatabase[]) {
 export const caricaDatabaseGestore = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: unknown) => {
-    const tabelle = oggettoCopia(input)?.tabelle;
-    const piano = oggettoCopia(tabelle);
-    if (!piano) throw new Error("Questo non è il file del database completo.");
-    const pulito: { [tabella: string]: RigaDatabase[] } = {};
-    for (const nome of TABELLE_DATABASE) {
-      const righe = piano[nome];
-      if (!Array.isArray(righe)) continue;
-      pulito[nome] = righe.filter((row): row is RigaDatabase => Boolean(oggettoCopia(row)));
-    }
-    if (!pulito.user && !pulito.profiles && !pulito.logbook_entries) throw new Error("Questo non è il file del database completo.");
-    return { tabelle: pulito };
+    const body = oggettoCopia(input);
+    const tabella = testoCopia(body?.tabella);
+    const ammesse = new Set<string>(TABELLE_DATABASE);
+    if (!body || !ammesse.has(tabella) || !Array.isArray(body.righe)) throw new Error("Questo non è il file del database completo.");
+    const righe = body.righe.filter((row): row is RigaDatabase => Boolean(oggettoCopia(row)));
+    const utenti = Array.isArray(body.utenti)
+      ? body.utenti.filter((row): row is RigaDatabase => Boolean(oggettoCopia(row))).map((row) => ({ id: testoCopia(row.id), email: testoCopia(row.email) }))
+      : [];
+    return { tabella, righe, utenti };
   })
-  .handler(async ({ context, data }): Promise<{ account: number; immersioni: number; foto: number }> => {
+  .handler(async ({ context, data }): Promise<{ scritte: number }> => {
     const sql = await getSql();
     await requirePlatform(sql, context.userId);
     const esistenti = await sql.query<{ id: string; email: string }>(`select "id", "email" from "user"`);
     const perMail = new Map(esistenti.map((row) => [row.email.trim().toLowerCase(), row.id]));
     const mappa = new Map<string, string>();
-    for (const row of data.tabelle.user ?? []) {
-      const id = testoCopia(row.id);
-      const email = testoCopia(row.email).trim().toLowerCase();
+    for (const row of data.utenti) {
+      const email = row.email.trim().toLowerCase();
       const gia = email ? perMail.get(email) : undefined;
-      if (id && gia && gia !== id) mappa.set(id, gia);
+      if (row.id && gia && gia !== row.id) mappa.set(row.id, gia);
     }
-    for (const nome of TABELLE_DATABASE) {
-      const origine = data.tabelle[nome];
-      if (!origine?.length) continue;
-      const righe = origine
-        .filter((row) => !(nome === "user" && mappa.has(testoCopia(row.id))))
-        .filter((row) => !(nome === "account" && mappa.has(testoCopia(row.userId))))
-        .map((row) => rimappaRiga(row, mappa));
-      try {
-        await importaTabella(sql, nome, righe);
-      } catch (reason) {
-        const message = reason instanceof Error ? reason.message : "Caricamento non riuscito.";
-        throw new Error(`Caricamento fermo su ${nome}. ${message}`);
-      }
+    const righe = data.righe
+      .filter((row) => !(data.tabella === "user" && mappa.has(testoCopia(row.id))))
+      .filter((row) => !(data.tabella === "account" && mappa.has(testoCopia(row.userId))))
+      .map((row) => rimappaRiga(row, mappa));
+    try {
+      const scritte = await importaTabella(sql, data.tabella, righe);
+      return { scritte };
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Caricamento non riuscito.";
+      throw new Error(`Caricamento fermo su ${data.tabella}. ${message}`);
     }
-    return {
-      account: data.tabelle.user?.length ?? data.tabelle.profiles?.length ?? 0,
-      immersioni: data.tabelle.logbook_entries?.length ?? 0,
-      foto: data.tabelle.logbook_photos?.length ?? 0,
-    };
   });
 
 export type ModuloMancante = {
