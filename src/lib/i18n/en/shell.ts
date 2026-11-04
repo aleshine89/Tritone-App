@@ -360,6 +360,7 @@ export const EN_SHELL: Record<string, string> = {
   "Password dimenticata": "Forgotten password",
   "oppure": "or",
   "Continua con {nome}": "Continue with {nome}",
+  "Continua con Google": "Continue with Google",
   "L'accesso non è ancora attivo.": "Sign-in is not active yet.",
   "Questa email è già registrata. Entra con la password.": "This email is already registered. Sign in with the password.",
   "La mail non è ancora confermata. Controlla la posta e apri il link, poi entra.": "The email is not confirmed yet. Check your inbox and open the link, then sign in.",
