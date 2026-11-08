@@ -7,11 +7,15 @@ export function Lucchetto({ chiusura }: { chiusura: "prova" | "prezzo" }) {
   const t = useT();
   return (
     <section className="mx-auto max-w-3xl rounded-card border border-line bg-surface p-5">
-      <h2 className="text-2xl">{chiusura === "prova" ? t("Prova fino al {data}", { data: formatDay("2027-03-31") }) : t("Sblocca a 5 € l'anno")}</h2>
-      <p className="mt-2 text-sm text-mist">{t("Pianifica, specie, MOD e checklist. I moduli da inviare restano aperti.")}</p>
-      <button type="button" disabled className="mt-4 min-h-11 rounded-full border border-line px-4 text-sm text-mist">
-        {t("Disponibile da febbraio")}
-      </button>
+      <h2 className="text-2xl">{chiusura === "prova" ? t("Prova fino al {data}", { data: formatDay("2027-03-31") }) : t("Sblocca con Pro")}</h2>
+      <p className="mt-2 text-sm text-mist">{t("Pianifica, specie, MOD e checklist. I moduli da inviare restano aperti. Il Pro costa 14,90 € l'anno.")}</p>
+      {chiusura === "prezzo" ? (
+        <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: undefined }} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brass px-4 text-sm font-medium text-ink">
+          {t("Sblocca con Pro")}
+        </Link>
+      ) : (
+        <p className="mt-4 text-sm text-brass">{t("Fino al 31 marzo 2027 l'attivazione è gratuita.")}</p>
+      )}
     </section>
   );
 }

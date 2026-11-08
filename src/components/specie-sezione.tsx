@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Lock, X } from "lucide-react";
 import { Riconosci } from "@/components/riconosci";
 import { FotoPiena } from "@/components/foto-vista";
 import { messaggioErrore, useT } from "@/lib/i18n";
@@ -16,6 +16,7 @@ import {
   type VistaScubadex,
 } from "@/lib/scubadex.functions";
 import { fotoCatalogo } from "@/lib/specie.functions";
+import { SegnoPro } from "@/components/segno-pro";
 
 type VoceLista = {
   id: string;
@@ -23,6 +24,7 @@ type VoceLista = {
   scientifico: string;
   categoria: string;
   propria: boolean;
+  foto?: string;
 };
 
 export function SpecieSezione({ pro }: { pro: boolean }) {
@@ -52,7 +54,7 @@ export function SpecieSezione({ pro }: { pro: boolean }) {
             className={`flex min-h-28 flex-col items-center justify-center rounded-2xl border px-4 py-5 text-center ${aperta === "scubadex" ? "border-lagoon bg-lagoon/15" : "border-line bg-surface"}`}
             onClick={() => scegli("scubadex")}
           >
-            <span className="text-2xl">{t("Scubadex")}</span>
+            <span className="text-2xl">{t("Scubadex")}<SegnoPro /></span>
             <span className="mt-1 text-sm text-mist">{t("Il tuo catalogo")}</span>
           </button>
         ) : (
@@ -130,7 +132,7 @@ export function SpecieLogbook({
   return (
     <div className="sm:col-span-2">
       <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm disabled:opacity-60" disabled={!pronto} onClick={() => setAperto(true)}>
-        {t("Aggiungi specie viste")}
+        {t("Aggiungi specie viste")}<SegnoPro />
       </button>
       {ids.length ? <p className="mt-2 text-xs text-mist">{t("{n} specie in questa immersione", { n: ids.length })}</p> : null}
       {errore ? <p className="mt-2 text-sm text-danger">{errore}</p> : null}
@@ -179,6 +181,51 @@ function CercaNome() {
   );
 }
 
+const cacheFoto = new Map<string, string>();
+
+function miniaturaDi(url: string): string {
+  return url.replace("/large.", "/square.").replace("/medium.", "/square.").replace("/small.", "/square.");
+}
+
+function Miniatura({ scientifico, propria, foto, root }: { scientifico: string; propria: boolean; foto: string; root: RefObject<HTMLElement | null> }) {
+  const nota = useRef<HTMLSpanElement>(null);
+  const [url, setUrl] = useState(propria ? foto : cacheFoto.get(scientifico) ?? "");
+
+  useEffect(() => {
+    if (propria) {
+      setUrl(foto);
+      return;
+    }
+    if (!scientifico || cacheFoto.has(scientifico)) {
+      setUrl(cacheFoto.get(scientifico) ?? "");
+      return;
+    }
+    const el = nota.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      io.disconnect();
+      void fotoCatalogo({ data: { nome: scientifico } })
+        .then((row) => {
+          cacheFoto.set(scientifico, row.url || "");
+          setUrl(row.url || "");
+        })
+        .catch(() => {
+          cacheFoto.set(scientifico, "");
+        });
+    }, { root: root.current, rootMargin: "160px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [foto, propria, root, scientifico]);
+
+  const src = url ? (propria ? url : miniaturaDi(url)) : "";
+  return (
+    <span ref={nota} className="size-14 shrink-0 overflow-hidden rounded-xl bg-abyss">
+      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : null}
+    </span>
+  );
+}
+
 function Scubadex() {
   const t = useT();
   const [pagina, setPagina] = useState<{ viste: VistaScubadex[]; proprie: SpecieMia[]; anno: number } | null>(null);
@@ -187,6 +234,7 @@ function Scubadex() {
   const [categoria, setCategoria] = useState("");
   const [aperta, setAperta] = useState<VoceLista | null>(null);
   const [nuova, setNuova] = useState(false);
+  const lista = useRef<HTMLUListElement>(null);
 
   function carica() {
     return paginaScubadex().then(setPagina);
@@ -209,7 +257,7 @@ function Scubadex() {
   const viste = new Map((pagina?.viste ?? []).map((row) => [row.id, row.giorno]));
   const voci: VoceLista[] = [
     ...CATALOGO_SCUBADEX.map((item) => ({ id: item.id, nome: item.nomeComune, scientifico: item.nomeScientifico, categoria: item.raggruppamento, propria: false })),
-    ...(pagina?.proprie ?? []).map((item) => ({ id: item.id, nome: item.nome, scientifico: item.luogo, categoria: t("Le mie"), propria: true })),
+    ...(pagina?.proprie ?? []).map((item) => ({ id: item.id, nome: item.nome, scientifico: item.luogo, categoria: t("Le mie"), propria: true, foto: item.foto })),
   ];
   const visibili = voci.filter((item) => {
     if (categoria && item.categoria !== categoria) return false;
@@ -231,13 +279,23 @@ function Scubadex() {
     }
   }
 
+  const totale = voci.length;
+  const fatte = viste.size;
+  const giro = totale ? Math.round((fatte / totale) * 100) : 0;
+
   return (
     <section className="mt-8">
-      <div className="flex items-end justify-between gap-3">
-        <h2 className="text-2xl">{t("Scubadex")}</h2>
-        <p className="text-sm text-brass">{t("{n} viste", { n: viste.size })}</p>
+      <div className="flex items-center gap-4">
+        <svg viewBox="0 0 36 36" className="size-16 shrink-0 -rotate-90 text-line" aria-hidden>
+          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" />
+          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" className="text-lagoon" strokeWidth="3" strokeLinecap="round" pathLength="100" strokeDasharray={`${giro} 100`} />
+        </svg>
+        <div className="min-w-0">
+          <h2 className="text-2xl">{t("Scubadex")}<SegnoPro /></h2>
+          <p className="mt-1 text-lg">{t("{n} di {totale}", { n: fatte, totale })}</p>
+          <p className="text-sm text-brass">{t("Nuove quest'anno: {n}", { n: nuove })}</p>
+        </div>
       </div>
-      <p className="mt-2 text-sm text-mist">{t("Nuove quest'anno: {n}", { n: nuove })}</p>
       {errore ? <p className="mt-2 text-sm text-danger">{errore}</p> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {(["tutte", "viste", "non"] as const).map((voce) => (
@@ -254,18 +312,24 @@ function Scubadex() {
       <button type="button" className="mt-3 min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => setNuova(true)}>
         {t("Aggiungi specie")}
       </button>
-      <ul className="mt-3 grid max-h-[28rem] gap-2 overflow-auto">
-        {visibili.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 rounded-2xl border border-line bg-deep px-3 py-2">
-            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setAperta(item)}>
-              <span className="block truncate text-sm font-medium">{item.nome}</span>
-              <span className="block truncate text-xs italic text-mist">{item.scientifico}</span>
-            </button>
-            <button type="button" className={`min-h-11 shrink-0 rounded-full px-3 text-xs ${viste.has(item.id) ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => void spunta(item.id)}>
-              {viste.has(item.id) ? t("Vista") : t("Non vista")}
-            </button>
-          </li>
-        ))}
+      <ul ref={lista} className="mt-3 grid max-h-[28rem] gap-2 overflow-auto">
+        {visibili.map((item) => {
+          const vista = viste.has(item.id);
+          return (
+            <li key={item.id} className={`flex items-center gap-2 rounded-2xl border px-2 py-2 ${vista ? "border-lagoon bg-deep" : "border-line bg-deep opacity-75"}`}>
+              <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setAperta(item)}>
+                <Miniatura scientifico={item.propria ? "" : item.scientifico} propria={item.propria} foto={item.foto ?? ""} root={lista} />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{item.nome}</span>
+                  <span className="block truncate text-xs italic text-mist">{item.scientifico}</span>
+                </span>
+              </button>
+              <button type="button" className={`min-h-11 shrink-0 rounded-full px-3 text-xs ${vista ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => void spunta(item.id)}>
+                {vista ? t("Vista") : t("Non vista")}
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {aperta ? <DettaglioVoce voce={aperta} propria={(pagina?.proprie ?? []).find((item) => item.id === aperta.id) ?? null} onClose={() => setAperta(null)} /> : null}
       {nuova ? <NuovaSpecie onClose={() => setNuova(false)} onFatta={() => { setNuova(false); void carica(); }} /> : null}
@@ -295,13 +359,11 @@ function FinestraSpecie({ titolo, onClose, children }: { titolo: string; onClose
       aria-label={titolo}
       onClick={onClose}
     >
-      <div className="flex max-h-[min(92vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-card border border-line bg-deep shadow-xl" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-end border-b border-line px-4 py-3">
-          <button type="button" className="min-h-11 rounded-full bg-lagoon px-5 text-sm font-medium text-ink" onClick={onClose}>
-            {t("Chiudi")}
-          </button>
-        </div>
-        <div className="overflow-y-auto px-4 py-4">{children}</div>
+      <div className="relative flex max-h-[min(92vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-card border border-line bg-deep shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="absolute right-3 top-3 z-10 grid size-11 place-items-center rounded-full bg-ink/75 text-foam" aria-label={t("Chiudi")} onClick={onClose}>
+          <X className="size-5" aria-hidden />
+        </button>
+        <div className="overflow-y-auto">{children}</div>
       </div>
     </div>
   );
@@ -333,22 +395,24 @@ function SchedaCompleta({ scheda, onClose }: { scheda: SpecieCatalogo; onClose: 
   }, [scheda.nomeScientifico]);
   return (
     <FinestraSpecie titolo={scheda.nomeComune} onClose={onClose}>
-      <p className="text-xs uppercase tracking-wide text-brass">{scheda.raggruppamento}</p>
-      <p className="mt-1 text-lg font-medium">{scheda.nomeComune}</p>
-      <p className="text-sm italic text-mist">{scheda.nomeScientifico}</p>
-      {foto ? (
-        <button type="button" className="mt-3 block w-full" onClick={() => setPiena(true)}>
-          <img src={foto} alt={scheda.nomeComune} className="max-h-56 w-full rounded-xl object-cover" />
-        </button>
-      ) : null}
-      <dl className="mt-3 grid gap-3">
-        {campi.map(([etichetta, valore]) => valore ? (
-          <div key={etichetta}>
-            <dt className="text-xs uppercase tracking-wide text-mist">{t(etichetta)}</dt>
-            <dd className="mt-1 text-sm leading-relaxed">{valore}</dd>
-          </div>
-        ) : null)}
-      </dl>
+      <button type="button" className="relative block w-full" onClick={() => { if (foto) setPiena(true); }}>
+        {foto ? <img src={foto} alt={scheda.nomeComune} className="h-72 w-full object-cover" /> : <span className="block h-40 bg-abyss" />}
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink via-ink/70 to-transparent px-4 pb-4 pt-16 text-left">
+          <span className="block text-xs uppercase tracking-wide text-brass">{scheda.raggruppamento}</span>
+          <span className="mt-1 block text-2xl font-medium">{scheda.nomeComune}</span>
+        </span>
+      </button>
+      <div className="px-4 py-4">
+        <p className="text-sm italic text-mist">{scheda.nomeScientifico}</p>
+        <dl className="mt-5 grid gap-4">
+          {campi.map(([etichetta, valore]) => valore ? (
+            <div key={etichetta}>
+              <dt className="text-[11px] uppercase tracking-wide text-mist">{t(etichetta)}</dt>
+              <dd className="mt-1 text-sm leading-relaxed">{valore}</dd>
+            </div>
+          ) : null)}
+        </dl>
+      </div>
       {piena && foto ? <FotoPiena src={foto} alt={scheda.nomeComune} onClose={() => setPiena(false)} /> : null}
     </FinestraSpecie>
   );
@@ -365,12 +429,18 @@ function SchedaMia({ specie, nome, onClose }: { specie: SpecieMia | null; nome: 
   const [piena, setPiena] = useState(false);
   return (
     <FinestraSpecie titolo={nome} onClose={onClose}>
-      <p className="text-xs uppercase tracking-wide text-brass">{t("Nel tuo catalogo")}</p>
-      <p className="mt-1 text-lg font-medium">{nome}</p>
-      {specie?.giorno ? <p className="mt-1 text-sm text-mist">{formatDay(specie.giorno)}</p> : null}
-      {specie?.foto ? <button type="button" className="mt-3 block w-full" onClick={() => setPiena(true)}><img src={specie.foto} alt="" className="max-h-56 w-full rounded-xl object-cover" /></button> : null}
-      {specie?.luogo ? <p className="mt-2 text-sm text-mist">{specie.luogo}</p> : null}
-      {specie?.note ? <p className="mt-2 text-sm">{specie.note}</p> : null}
+      <button type="button" className="relative block w-full" onClick={() => { if (specie?.foto) setPiena(true); }}>
+        {specie?.foto ? <img src={specie.foto} alt="" className="h-72 w-full object-cover" /> : <span className="block h-40 bg-abyss" />}
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink via-ink/70 to-transparent px-4 pb-4 pt-16 text-left">
+          <span className="block text-xs uppercase tracking-wide text-brass">{t("Nel tuo catalogo")}</span>
+          <span className="mt-1 block text-2xl font-medium">{nome}</span>
+        </span>
+      </button>
+      <div className="px-4 py-4">
+        {specie?.giorno ? <p className="text-sm text-mist">{formatDay(specie.giorno)}</p> : null}
+        {specie?.luogo ? <p className="mt-2 text-sm italic text-mist">{specie.luogo}</p> : null}
+        {specie?.note ? <p className="mt-4 text-sm leading-relaxed">{specie.note}</p> : null}
+      </div>
       {piena && specie?.foto ? <FotoPiena src={specie.foto} alt={nome} onClose={() => setPiena(false)} /> : null}
     </FinestraSpecie>
   );
@@ -425,7 +495,7 @@ function NuovaSpecie({ onClose, onFatta }: { onClose: () => void; onFatta: () =>
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
-          void prepareFile(file).then((pronto) => setFoto(pronto.data)).catch((reason: unknown) => setErrore(messaggioErrore(reason, "La foto non è adatta.")));
+          void prepareFile(file, "guarda").then((pronto) => setFoto(pronto.data)).catch((reason: unknown) => setErrore(messaggioErrore(reason, "La foto non è adatta.")));
         }} />
       </label>
       {foto ? <img src={foto} alt="" className="mt-3 h-24 w-24 rounded-xl object-cover" /> : null}

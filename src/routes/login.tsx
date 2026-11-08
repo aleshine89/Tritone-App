@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Navigate, useNavigate, useRouter } from "@tanstack/react-router";
-import { authClient, authEnabled, signInGoogle } from "@/lib/auth/client";
+import { authClient, authEnabled, GROK_PROVIDERS, signIn, signInGoogle } from "@/lib/auth/client";
+import { googleDirettoAttivo } from "@/lib/auth/google-mode";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { clearFondaleCache } from "@/components/app-frame";
 import { Copyright } from "@/components/copyright";
@@ -47,8 +48,15 @@ function LoginCard() {
   const [token, setToken] = useState<string | null>(null);
   const [fatta, setFatta] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googleNuovo, setGoogleNuovo] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const router = useRouter();
+
+  useEffect(() => {
+    void googleDirettoAttivo()
+      .then((diretto) => setGoogleNuovo(diretto))
+      .catch(() => setGoogleNuovo(false));
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -346,17 +354,30 @@ function LoginCard() {
           {authEnabled ? (
             <div className="mt-5 space-y-2">
               <p className="text-center text-xs uppercase tracking-widest text-mist">{t("oppure")}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  void signInGoogle({ callbackURL: "/" }).catch((reason: unknown) => {
-                    setError(reason instanceof Error ? reason.message : "Accesso non riuscito.");
-                  });
-                }}
-                className="min-h-11 w-full rounded-full border border-line text-sm"
-              >
-                {t("Continua con Google")}
-              </button>
+              {googleNuovo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void signInGoogle({ callbackURL: "/" }).catch((reason: unknown) => {
+                      setError(reason instanceof Error ? reason.message : "Accesso non riuscito.");
+                    });
+                  }}
+                  className="min-h-11 w-full rounded-full border border-line text-sm"
+                >
+                  {t("Continua con Google")}
+                </button>
+              ) : googleNuovo === false ? (
+                GROK_PROVIDERS.map((provider) => (
+                  <button
+                    key={provider.providerId}
+                    type="button"
+                    onClick={() => signIn(provider.providerId, { callbackURL: "/" })}
+                    className="min-h-11 w-full rounded-full border border-line text-sm"
+                  >
+                    {t("Continua con {nome}", { nome: provider.label })}
+                  </button>
+                ))
+              ) : null}
             </div>
           ) : (
             <p className="mt-4 text-sm text-mist">{t("L'accesso non è ancora attivo.")}</p>

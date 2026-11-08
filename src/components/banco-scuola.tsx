@@ -6,6 +6,7 @@ import { PulsanteSoci } from "@/components/area-soci";
 import { ScuolaChiusa } from "@/components/lucchetto";
 import { listaPersoneScuola, listSubmissions, listUscite, contaModuliDaLeggere, statoDocumentiStaff, reportControlli, type PersonaScuola, type ReportControlli, type StatoStaffHome, type SubmissionListItem } from "@/lib/fondale.functions";
 import { formatDay, oggiRoma, problemiDocumenti, scadenzaStato } from "@/lib/format";
+import { entroUnMese } from "@/lib/prezzi";
 import { scriviPdfReport } from "@/lib/foglio-pdf";
 import { messaggioErrore, useT } from "@/lib/i18n";
 
@@ -81,6 +82,11 @@ export function BancoScuola() {
 
   return (
     <div className="mx-auto max-w-3xl">
+      {frame.owner && entroUnMese(frame.oggi, frame.club.attivoFino) ? (
+        <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "struttura" }} className="mt-4 block rounded-2xl border border-brass bg-brass/15 px-4 py-3 text-sm font-medium text-brass">
+          {t("Rinnova piano")}
+        </Link>
+      ) : null}
       {frame.owner && !frame.club.hasChiave ? (
         <p className="mt-4 text-sm text-mist">{t("La chiave della scuola si crea in Profilo, nelle impostazioni. Senza, i moduli sanitari non si aprono.")}</p>
       ) : null}

@@ -29,6 +29,7 @@ const inputClass =
 export function SchedaEditor({
   formKey,
   existing,
+  soloLettura = false,
 }: {
   formKey: string;
   existing?: {
@@ -43,6 +44,7 @@ export function SchedaEditor({
     aperture?: { nome: string; openedAt: string }[];
     modifiche?: { nome: string; modifiedAt: string }[];
   };
+  soloLettura?: boolean;
 }) {
   const form = formByKey(formKey);
   const frame = useFondale();
@@ -272,19 +274,19 @@ export function SchedaEditor({
       </div>
     );
   }
-  if (arrivata && !modifica && existing) {
+  if ((arrivata || soloLettura) && !modifica && existing?.status === "inviato") {
     return (
       <div className="mx-auto max-w-3xl">
         {form.key === "scheda-socio" ? <DecisioneSocio submissionId={existing.id} banco={latoScuola} onNumero={segnaNumero} /> : null}
-        {form.key === "scheda-socio" ? <DocumentiSocio submissionId={existing.id} puoCaricare={existing.mine} /> : null}
+        {form.key === "scheda-socio" ? <DocumentiSocio submissionId={existing.id} puoCaricare={soloLettura ? false : existing.mine} /> : null}
         <LetturaScheda
           form={form}
           dati={data}
           modifiche={modifiche}
           aperture={existing.aperture ?? []}
           indietro={latoScuola ? "/archivio" : "/moduli"}
-          onModifica={latoScuola ? () => apriModifica() : undefined}
-          logbookId={latoScuola && form.key === "brevetto-esperienza" ? existing.id : undefined}
+          onModifica={!soloLettura && latoScuola ? () => apriModifica() : undefined}
+          logbookId={!soloLettura && latoScuola && form.key === "brevetto-esperienza" ? existing.id : undefined}
         />
       </div>
     );

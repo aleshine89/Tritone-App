@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import { AppFrame } from "@/components/app-frame";
 import { SchedaEditor } from "@/components/scheda-editor";
 import { getSubmission, type SubmissionDetail } from "@/lib/fondale.functions";
@@ -9,14 +9,16 @@ export const Route = createFileRoute("/scheda/$id")({ component: Page });
 
 function Page() {
   const { id } = Route.useParams();
+  const hash = useRouterState({ select: (state) => state.location.hash });
+  const solaLettura = hash === "lettura" || hash === "#lettura";
   return (
     <AppFrame>
-      <Existing id={id} />
+      <Existing id={id} solaLettura={solaLettura} />
     </AppFrame>
   );
 }
 
-function Existing({ id }: { id: string }) {
+function Existing({ id, solaLettura }: { id: string; solaLettura: boolean }) {
   const t = useT();
   const [row, setRow] = useState<SubmissionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ function Existing({ id }: { id: string }) {
   return (
     <SchedaEditor
       formKey={row.formKey}
+      soloLettura={solaLettura}
       existing={{
         id: row.id,
         status: row.status,

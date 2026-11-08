@@ -13,6 +13,7 @@ import { scadenzaStato } from "@/lib/format";
 import { prepareFotoProfilo } from "@/lib/prepare-file";
 import { useT, messaggioErrore, type Traduci } from "@/lib/i18n";
 import { wizardGiaVisto } from "@/components/wizard-sub";
+import { SegnoPro } from "@/components/segno-pro";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -101,6 +102,11 @@ function HomeBody() {
   return (
     <div className="mx-auto max-w-3xl">
       <p className="text-sm text-mist">{t("Subacqueo")}</p>
+      {frame.abbonamento.ruolo === "sub" && !frame.abbonamento.proAperto ? (
+        <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: undefined }} className="mt-3 block rounded-2xl border border-brass bg-brass/15 px-4 py-3 text-sm font-medium text-brass">
+          {t("Passa a Pro — 14,90 €/anno")}
+        </Link>
+      ) : null}
       {soloSub && frame.wizardOk === false ? (
         <Link to="/inizia" className="mt-4 block rounded-2xl border border-brass px-4 py-3 text-sm font-medium">
           {t("Completa i tuoi documenti")}
@@ -121,21 +127,19 @@ function HomeBody() {
         </Link>
       </div>
 
-      <p className="mt-2 text-xs text-mist">
-        {anno
-          ? anno.immersioni === 1
-            ? t("1 immersione")
-            : t("{n} immersioni", { n: anno.immersioni })
-          : t("Immersioni")}
-        {anno?.massima ? ` · ${t("massima {m} m", { m: anno.massima })}` : ""}
-      </p>
+      <div className="mt-4 flex items-center gap-4">
+        <svg viewBox="0 0 36 36" className="size-16 shrink-0 -rotate-90 text-line" aria-hidden>
+          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" />
+          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" className="text-lagoon" strokeWidth="3" strokeLinecap="round" pathLength="100" strokeDasharray={`${anno ? Math.min(100, Math.round((anno.immersioni / 20) * 100)) : 0} 100`} />
+        </svg>
+        <div className="min-w-0">
+          <p className="text-lg">{t("{n} di {totale}", { n: anno?.immersioni ?? 0, totale: 20 })}</p>
+          <p className="mt-1 text-xs text-mist">{t("Traguardo consigliato: 20 immersioni l'anno. Non è un obbligo.")}</p>
+          {anno?.massima ? <p className="mt-1 text-xs text-brass">{t("massima {m} m", { m: anno.massima })}</p> : null}
+        </div>
+      </div>
 
-      {mine[0]?.clubNome ? (
-        <Link to="/scheda/$id" params={{ id: String(mine[0].id) }} className="mt-3 block text-sm text-mist">
-          {t("Inviato a {club}", { club: mine[0].clubNome })}
-          <span> · {t(formByKey(mine[0].formKey)?.title ?? "Modulo")}</span>
-        </Link>
-      ) : null}
+      <ModuliOggi righe={rows} />
 
       {azione ? <AzioneGrande azione={azione} /> : null}
 
@@ -167,7 +171,10 @@ function HomeBody() {
           <Link key={voce.voce} to="/personale" search={{ voce: voce.voce }} className="flex items-center gap-3 rounded-2xl border border-line bg-deep px-3 py-3">
             <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
             <span className="min-w-0">
-              <span className="block text-sm font-medium leading-tight">{t(voce.nome)}</span>
+              <span className="block text-sm font-medium leading-tight">
+                {t(voce.nome)}
+                {voce.voce === "checklist" && frame.abbonamento.proAperto ? <SegnoPro /> : null}
+              </span>
               <span className="mt-0.5 block text-xs text-mist">{t(voce.riga)}</span>
             </span>
           </Link>
@@ -179,6 +186,50 @@ function HomeBody() {
       <p className="mt-8 text-xs leading-relaxed text-mist">{t("Modelli operativi allineati alla Legge 7 maggio 2026, n. 70 e alle prassi documentali di settore. Non sostituiscono certificati o polizze. I registri vanno conservati secondo normativa.")}</p>
       <InstallApp />
     </div>
+  );
+}
+
+function giornoRoma(adesso = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(adesso);
+}
+
+function giornoInvio(createdAt: string): string {
+  const testo = createdAt.trim().replace(" ", "T");
+  const conZona = /(?:Z|[+-]\d{2}:\d{2})$/.test(testo);
+  const istante = new Date(conZona ? testo : `${testo}Z`);
+  if (Number.isNaN(istante.getTime())) return createdAt.slice(0, 10);
+  return giornoRoma(istante);
+}
+
+function ModuliOggi({ righe }: { righe: SubmissionListItem[] | null }) {
+  const t = useT();
+  const [aperta, setAperta] = useState(false);
+  const oggi = giornoRoma();
+  const inviati = (righe ?? []).filter((row) => row.mine && row.status === "inviato" && giornoInvio(row.createdAt) === oggi);
+
+  return (
+    <section className="mt-3">
+      <button type="button" className="flex min-h-11 w-full items-center justify-between gap-3 text-left text-sm" aria-expanded={aperta} onClick={() => setAperta((ora) => !ora)}>
+        <span>{t("Moduli inviati oggi")}</span>
+        <span className="text-mist">{inviati.length}</span>
+      </button>
+      {aperta ? (
+        inviati.length ? (
+          <ul className="mt-2 grid gap-2">
+            {inviati.map((row) => (
+              <li key={row.id}>
+                <Link to="/scheda/$id" params={{ id: String(row.id) }} hash="lettura" className="block rounded-2xl border border-line bg-deep px-4 py-3">
+                  <span className="block text-sm font-medium">{t(formByKey(row.formKey)?.title ?? "Modulo")}</span>
+                  {row.clubNome ? <span className="mt-1 block text-xs text-mist">{row.clubNome}</span> : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-mist">{t("Nessun modulo inviato oggi.")}</p>
+        )
+      ) : null}
+    </section>
   );
 }
 

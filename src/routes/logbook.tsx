@@ -5,6 +5,7 @@ import { AppFrame, useFondale } from "@/components/app-frame";
 import { DiveAtlas, DiveMap } from "@/components/dive-map";
 import { FotoPiena } from "@/components/foto-vista";
 import { Lucchetto } from "@/components/lucchetto";
+import { SegnoPro } from "@/components/segno-pro";
 import { ScambioLogbook } from "@/components/logbook-uddf";
 import { addLogPhoto, deleteLogPhoto, deleteLogVoice, deleteLogbook, getLogVoice, listLogPhotos, listLogbook, saveLogVoice, saveLogbook, accettaCondivisione, cercaCompagni, condividiImmersione, leggiCondivisione, type CompagnoLogbook, type LogEntry } from "@/lib/fondale.functions";
 import { ScadenzaField } from "@/components/scadenza-field";
@@ -67,6 +68,8 @@ const empty = {
   foto: 0,
   voce: 0,
   condivisaDa: "",
+  decompressione: "" as "" | "si" | "no",
+  profilo: [] as LogEntry["profilo"],
 };
 
 type Shot = { key: string; id: number; name: string; type: string; data: string };
@@ -180,6 +183,7 @@ function Logbook() {
           lng: dive.lng,
           ora: dive.ora,
           condivisaDa: dive.da,
+          decompressione: dive.decompressione,
         });
         setShots([]);
         setDrop([]);
@@ -289,7 +293,7 @@ function Logbook() {
     try {
       const next: Shot[] = [];
       for (const file of Array.from(list)) {
-        const prepared = await prepareFile(file);
+        const prepared = await prepareFile(file, "guarda");
         if (!prepared.type.startsWith("image/")) throw new Error("Qui si aggiungono solo foto.");
         next.push({ key: crypto.randomUUID(), id: 0, ...prepared });
       }
@@ -351,6 +355,7 @@ function Logbook() {
               lat: draft.lat,
               lng: draft.lng,
               ora: draft.ora,
+              decompressione: draft.decompressione,
             },
           },
         });
@@ -368,14 +373,16 @@ function Logbook() {
       if (speciePro && (draft.id === 0 || speciePronte)) {
         await salvaSpecieImmersione({ data: { entryId: savedEntry.id, ids: specieIds, giorno: draft.data } });
       }
-      for (const id of drop) await deleteLogPhoto({ data: { id } });
-      for (const shot of shots.filter((item) => item.id === 0)) {
-        await addLogPhoto({ data: { entryId: savedEntry.id, file: { name: shot.name, type: shot.type, data: shot.data } } });
-      }
-      if (clip?.fresh) {
-        await saveLogVoice({ data: { entryId: savedEntry.id, file: { type: clip.type, data: clip.data } } });
-      } else if (!clip && hadVoice) {
-        await deleteLogVoice({ data: { id: savedEntry.id } });
+      if (speciePro) {
+        for (const id of drop) await deleteLogPhoto({ data: { id } });
+        for (const shot of shots.filter((item) => item.id === 0)) {
+          await addLogPhoto({ data: { entryId: savedEntry.id, file: { name: shot.name, type: shot.type, data: shot.data } } });
+        }
+        if (clip?.fresh) {
+          await saveLogVoice({ data: { entryId: savedEntry.id, file: { type: clip.type, data: clip.data } } });
+        } else if (!clip && hadVoice) {
+          await deleteLogVoice({ data: { id: savedEntry.id } });
+        }
       }
       await load();
       setCartolina({
@@ -410,6 +417,8 @@ function Logbook() {
   }
 
   const rows = items ?? [];
+  const gruppi = gruppiAnno(rows);
+  const numeri = numeriLogbook(rows);
   const minutes = rows.reduce((sum, row) => sum + (Number(row.minuti) || 0), 0);
   const deepest = rows.reduce((max, row) => Math.max(max, Number(row.profondita) || 0), 0);
   const spots = rows.filter((row) => row.lat && row.lng).map((row) => ({ lat: row.lat, lng: row.lng, label: row.localita }));
@@ -452,10 +461,10 @@ function Logbook() {
             {t("Stampa")}
           </button>
           <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => setScambio((current) => (current === "importa" ? null : "importa"))}>
-            {t("Importa logbook")}
+            {t("Importa logbook")}{frame.abbonamento.proAperto ? <SegnoPro /> : null}
           </button>
           <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => setScambio((current) => (current === "esporta" ? null : "esporta"))}>
-            {t("Esporta logbook")}
+            {t("Esporta logbook")}{frame.abbonamento.proAperto ? <SegnoPro /> : null}
           </button>
         </div>
       </div>
@@ -492,6 +501,7 @@ function Logbook() {
               shots={shots}
               clip={clip}
               onModifica={() => setModifica(true)}
+              onCondividi={() => setCondividi(draft)}
               onChiudi={close}
               onPreview={setPreview}
               preview={preview}
@@ -528,6 +538,25 @@ function Logbook() {
               <Field label={t("Tempo (minuti)")}>
                 <input inputMode="numeric" value={draft.minuti} onChange={(event) => setDraft({ ...draft, minuti: event.target.value })} className={inputClass} />
               </Field>
+              <fieldset className="sm:col-span-2">
+                <legend className="mb-1 text-sm text-mist">{t("Decompressione")}</legend>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "si" ? "bg-lagoon font-medium text-ink" : "border border-line"}`}
+                    onClick={() => setDraft({ ...draft, decompressione: "si" })}
+                  >
+                    {t("Sì")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "no" ? "bg-lagoon font-medium text-ink" : "border border-line"}`}
+                    onClick={() => setDraft({ ...draft, decompressione: "no" })}
+                  >
+                    {t("No")}
+                  </button>
+                </div>
+              </fieldset>
               <Field label={t("Miscela")}>
                 <select value={draft.miscela} onChange={(event) => setDraft({ ...draft, miscela: event.target.value })} className={inputClass}>
                   <option value="Aria">{t("Aria")}</option>
@@ -567,44 +596,56 @@ function Logbook() {
               <SpecieLogbook entryId={draft.id} pro={speciePro} giorno={draft.data} ids={specieIds} onChange={cambiaSpecie} />
               <div className="sm:col-span-2">
                 <p className="mb-1 text-sm text-mist">{t("Foto dell'immersione")}</p>
-                <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => photoRef.current?.click()}>
-                  {t("Aggiungi foto")}
-                </button>
-                <input
-                  ref={photoRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    void addPhotos(event.target.files);
-                    event.target.value = "";
-                  }}
-                />
-                {shots.length ? (
-                  <ul className="mt-3 grid grid-cols-3 gap-2">
-                    {shots.map((shot) => (
-                      <li key={shot.key} className="overflow-hidden rounded-xl border border-line">
-                        <button type="button" className="block w-full" onClick={() => setPreview(shot.data)}>
-                          <img src={shot.data} alt={shot.name} className="aspect-square w-full object-cover" />
-                        </button>
-                        <button type="button" className="min-h-11 w-full text-xs text-danger-soft" onClick={() => {
-                          setShots((current) => current.filter((item) => item.key !== shot.key));
-                          if (shot.id) setDrop((current) => [...current, shot.id]);
-                        }}>
-                          {t("Togli")}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                {speciePro ? (
+                  <>
+                    <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => photoRef.current?.click()}>
+                      {t("Aggiungi foto")}<SegnoPro />
+                    </button>
+                    <input
+                      ref={photoRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => {
+                        void addPhotos(event.target.files);
+                        event.target.value = "";
+                      }}
+                    />
+                    {shots.length ? (
+                      <ul className="mt-3 grid grid-cols-3 gap-2">
+                        {shots.map((shot) => (
+                          <li key={shot.key} className="overflow-hidden rounded-xl border border-line">
+                            <button type="button" className="block w-full" onClick={() => setPreview(shot.data)}>
+                              <img src={shot.data} alt={shot.name} className="aspect-square w-full object-cover" />
+                            </button>
+                            <button type="button" className="min-h-11 w-full text-xs text-danger-soft" onClick={() => {
+                              setShots((current) => current.filter((item) => item.key !== shot.key));
+                              if (shot.id) setDrop((current) => [...current, shot.id]);
+                            }}>
+                              {t("Togli")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-mist">{t("Nessuna foto ancora. Puoi scattarle o prenderle dalla galleria.")}</p>
+                    )}
+                    {preview ? <FotoPiena src={preview} alt={t("Foto dell'immersione")} onClose={() => setPreview(null)} /> : null}
+                  </>
                 ) : (
-                  <p className="mt-2 text-xs text-mist">{t("Nessuna foto ancora. Puoi scattarle o prenderle dalla galleria.")}</p>
+                  <>
+                    <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm text-mist" disabled>
+                      {t("Aggiungi foto")}<SegnoPro />
+                    </button>
+                    <p className="mt-2 text-xs text-brass">{t("Disponibile con Pro")}</p>
+                  </>
                 )}
-                {preview ? <FotoPiena src={preview} alt={t("Foto dell'immersione")} onClose={() => setPreview(null)} /> : null}
               </div>
               <div className="sm:col-span-2">
                 <NotaVocaleField
                   key={draft.id}
+                  pro={speciePro}
                   clip={clip}
                   onClip={(next) => {
                     voiceReq.current += 1;
@@ -657,56 +698,38 @@ function Logbook() {
       {items === null ? <p className="mt-6 text-sm text-mist">{t("Apro il logbook…")}</p> : null}
       {items && items.length === 0 ? <p className="mt-6 text-sm text-mist">{t("Nessuna immersione ancora. La prima la scrivi tu.")}</p> : null}
 
-      <ul className="no-print mt-4">
-        {rows.map((row, index) => (
-          <li key={row.id} className={index === 0 ? "" : "border-b border-line"}>
-            {index === 0 && cover ? (
-              <button type="button" className="relative mb-2 block h-72 w-full overflow-hidden rounded-card text-left" onClick={() => edit(row)}>
-                <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                <span className="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent" />
-                <span className="absolute inset-x-0 bottom-0 p-4">
-                  <span className="block text-5xl leading-none">{row.profondita ? `${row.profondita} m` : row.localita}</span>
-                  <span className="mt-1 block text-lg">{nomeSito(row.localita, t)}{row.punto ? ` · ${row.punto}` : ""}</span>
-                  <span className="mt-1 block text-xs text-foam">{formatDay(row.data)}{row.ora ? ` ${row.ora}` : ""}{row.minuti ? ` · ${row.minuti} min` : ""}</span>
-                  {row.condivisaDa ? <span className="mt-1 block text-xs text-lagoon">{t("condivisa da {nome}", { nome: row.condivisaDa })}</span> : null}
-                </span>
-              </button>
-            ) : (
-            <button type="button" className={index === 0 ? "mb-2 block w-full overflow-hidden rounded-card border border-line bg-surface text-left" : "block w-full py-3 text-left"} onClick={() => edit(row)}>
-              <span className={index === 0 ? "block p-4" : "block"}>
-                <p className="text-xs text-mist">{formatDay(row.data)}{row.ora ? ` ${row.ora}` : ""}</p>
-                <p className={index === 0 ? "mt-1 text-2xl" : "mt-1 text-sm"}>{nomeSito(row.localita, t)}{row.punto ? ` · ${row.punto}` : ""}</p>
-                {row.condivisaDa ? <p className="mt-1 text-xs text-lagoon">{t("condivisa da {nome}", { nome: row.condivisaDa })}</p> : null}
-                <p className="mt-1 text-xs text-brass">
-                {[
-                  row.profondita ? `${row.profondita} m` : "",
-                  row.minuti ? `${row.minuti} min` : "",
-                  row.miscela ? t(row.miscela) : "",
-                  row.buddy,
-                  row.foto ? (row.foto === 1 ? t("1 foto") : t("{n} foto", { n: row.foto })) : "",
-                  row.voce ? t("nota vocale") : "",
-                ].filter(Boolean).join(" · ")}
-              </p>
-              </span>
-            </button>
-            )}
-            <button type="button" className="mb-2 min-h-11 text-sm text-lagoon" onClick={() => setCondividi(row)}>
-              {t("Condividi con compagni")}
-            </button>
-            {row.lat && row.lng || row.foto || row.voce ? (
-              <div className="no-print pb-3">
-                <button type="button" className="min-h-11 text-sm text-brass" onClick={() => setSeen((current) => (current === row.id ? null : row.id))}>
-                  {seen === row.id ? t("Nascondi") : t(vediLabel(row))}
-                </button>
-                {seen === row.id && row.lat && row.lng ? (
-                  <div className="mt-1">
-                    <DiveMap lat={row.lat} lng={row.lng} />
-                  </div>
-                ) : null}
-                {seen === row.id && row.foto ? <DiveShots entryId={row.id} /> : null}
-                {seen === row.id && row.voce ? <DiveVoice entryId={row.id} /> : null}
-              </div>
-            ) : null}
+      <ul className="no-print mt-4 space-y-6">
+        {gruppi.map((gruppo) => (
+          <li key={gruppo.anno}>
+            <p className="text-sm text-mist">
+              <span className="text-xl text-foam">{gruppo.anno}</span>
+              {" · "}
+              {gruppo.righe.length === 1 ? t("1 immersione") : t("{n} immersioni", { n: gruppo.righe.length })}
+            </p>
+            <ul className="mt-2 grid gap-2">
+              {gruppo.righe.map((row) => {
+                const deco = eDeco(row);
+                return (
+                  <li key={row.id}>
+                    <button type="button" className="flex min-h-20 w-full overflow-hidden rounded-2xl border border-line bg-deep text-left text-foam" onClick={() => edit(row)}>
+                      <span className={`flex w-16 shrink-0 flex-col items-center justify-center text-sm font-medium leading-tight ${deco ? "border-r border-brass text-brass" : "bg-lagoon text-ink"}`}>
+                        <span>#{numeri.get(row.id)}</span>
+                        <span>{deco ? "DECO" : "REC"}</span>
+                      </span>
+                      <span className="relative flex min-w-0 flex-1 flex-col justify-center px-3">
+                        {row.profilo.length > 1 ? <CurvaProfilo punti={row.profilo} /> : null}
+                        <span className="relative truncate text-sm font-medium">{row.punto || nomeSito(row.localita, t)}</span>
+                        <span className="relative text-sm text-mist">{formatDay(row.data)}{row.ora ? ` ${row.ora}` : ""}</span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end justify-center px-3 text-sm">
+                        <span>{row.profondita ? `${row.profondita} m` : "—"}</span>
+                        <span className="text-mist">{row.minuti ? `${row.minuti} min` : "—"}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </li>
         ))}
       </ul>
@@ -902,6 +925,7 @@ function VistaImmersione({
   clip,
   preview,
   onModifica,
+  onCondividi,
   onChiudi,
   onPreview,
   specie,
@@ -919,6 +943,8 @@ function VistaImmersione({
     temperatura: string;
     visibilita: string;
     note: string;
+    decompressione: "" | "si" | "no";
+    profilo: LogEntry["profilo"];
     lat: string;
     lng: string;
     foto: number;
@@ -928,6 +954,7 @@ function VistaImmersione({
   clip: { data: string } | null;
   preview: string | null;
   onModifica: () => void;
+  onCondividi: () => void;
   onChiudi: () => void;
   onPreview: (src: string | null) => void;
   specie: { entryId: number; pro: boolean; giorno: string; ids: string[]; onChange: (ids: string[]) => void };
@@ -948,6 +975,7 @@ function VistaImmersione({
   if (draft.ossigeno) righe.push({ etichetta: t("Ossigeno %"), valore: draft.ossigeno });
   if (draft.temperatura) righe.push({ etichetta: t("Temperatura (°C)"), valore: draft.temperatura });
   if (draft.visibilita) righe.push({ etichetta: t("Visibilità (m)"), valore: draft.visibilita });
+  righe.push({ etichetta: t("Decompressione"), valore: eDeco(draft) ? t("Sì") : t("No") });
 
   return (
     <section className="rounded-card border border-line bg-surface p-4">
@@ -973,7 +1001,7 @@ function VistaImmersione({
           <p className="mt-2 text-xs text-mist">{draft.lat}, {draft.lng}</p>
         </div>
       ) : null}
-      {draft.foto || shots.length ? (
+      {specie.pro && (draft.foto || shots.length) ? (
         <div className="mt-4">
           <p className="mb-1 text-xs text-mist">{t("Foto dell'immersione")}</p>
           {shots.length ? (
@@ -992,7 +1020,7 @@ function VistaImmersione({
           {preview ? <FotoPiena src={preview} alt={t("Foto dell'immersione")} onClose={() => onPreview(null)} /> : null}
         </div>
       ) : null}
-      {draft.voce || clip ? (
+      {specie.pro && (draft.voce || clip) ? (
         <div className="mt-4">
           <p className="mb-1 text-xs text-mist">{t("Nota vocale")}</p>
           {clip ? <Lettore src={clip.data} /> : <p className="text-xs text-mist">{t("Apro la nota…")}</p>}
@@ -1005,11 +1033,78 @@ function VistaImmersione({
         <button type="button" className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium" onClick={onModifica}>
           {t("Modifica")}
         </button>
+        <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={onCondividi}>
+          {t("Condividi con compagni")}
+        </button>
         <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={onChiudi}>
           {t("Chiudi")}
         </button>
       </div>
     </section>
+  );
+}
+
+function eDeco(row: { decompressione: "" | "si" | "no"; profilo: LogEntry["profilo"] }): boolean {
+  if (row.decompressione === "si") return true;
+  if (row.decompressione === "no") return false;
+  const punti = [...row.profilo].sort((a, b) => a.t - b.t);
+  if (punti.length < 4) return false;
+  const max = punti.reduce((alto, punto) => Math.max(alto, punto.d), 0);
+  if (max < 10) return false;
+  let vistoFondo = false;
+  let inizio = punti[0];
+  for (const punto of punti) {
+    if (punto.d >= max - 1.5) vistoFondo = true;
+    const fermo = Math.abs(punto.d - inizio.d) <= 1.2 && punto.d >= 6 && punto.d <= max - 3;
+    if (!vistoFondo || !fermo) {
+      inizio = punto;
+      continue;
+    }
+    if (punto.t - inizio.t >= 60) return true;
+  }
+  return false;
+}
+
+function numeriLogbook(rows: LogEntry[]): Map<number, number> {
+  const ordine = [...rows].sort((a, b) => {
+    if (a.data !== b.data) return a.data < b.data ? -1 : 1;
+    if (a.ora !== b.ora) return a.ora < b.ora ? -1 : 1;
+    return a.id - b.id;
+  });
+  return new Map(ordine.map((row, index) => [row.id, index + 1]));
+}
+
+function gruppiAnno(rows: LogEntry[]): { anno: string; righe: LogEntry[] }[] {
+  const ordine: string[] = [];
+  const mappa = new Map<string, LogEntry[]>();
+  for (const row of rows) {
+    const anno = /^\d{4}/.test(row.data) ? row.data.slice(0, 4) : "—";
+    const lista = mappa.get(anno);
+    if (lista) lista.push(row);
+    else {
+      mappa.set(anno, [row]);
+      ordine.push(anno);
+    }
+  }
+  return ordine.map((anno) => ({ anno, righe: mappa.get(anno) ?? [] }));
+}
+
+function CurvaProfilo({ punti }: { punti: LogEntry["profilo"] }) {
+  const ordinati = [...punti].sort((a, b) => a.t - b.t);
+  const minT = ordinati[0]?.t ?? 0;
+  const maxT = ordinati[ordinati.length - 1]?.t ?? 1;
+  const maxD = ordinati.reduce((alto, punto) => Math.max(alto, punto.d), 1);
+  const traccia = ordinati
+    .map((punto) => {
+      const x = ((punto.t - minT) / (maxT - minT || 1)) * 100;
+      const y = 4 + (punto.d / maxD) * 32;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full text-lagoon opacity-70" aria-hidden>
+      <polyline points={traccia} fill="none" stroke="currentColor" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }
 
@@ -1089,10 +1184,12 @@ function Lettore({ src }: { src: string }) {
 
 function NotaVocaleField({
   clip,
+  pro,
   onClip,
   onRecording,
 }: {
   clip: VoiceClip | null;
+  pro: boolean;
   onClip: (next: VoiceClip | null) => void;
   onRecording: (on: boolean) => void;
 }) {
@@ -1137,10 +1234,17 @@ function NotaVocaleField({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
       streamRef.current = stream;
       const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type));
-      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      const opzioni: MediaRecorderOptions = { audioBitsPerSecond: 32_000 };
+      if (mime) opzioni.mimeType = mime;
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, opzioni);
+      } catch {
+        recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      }
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunksRef.current.push(event.data);
@@ -1178,25 +1282,36 @@ function NotaVocaleField({
   return (
     <div>
       <p className="mb-1 text-sm text-mist">{t("Nota vocale")}</p>
-      <p className="mb-2 text-xs text-mist">{t("Si ascolta qui dentro, senza scaricarla sul telefono. Massimo 2 minuti.")}</p>
-      {clip ? <Lettore src={clip.data} /> : null}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {recording ? (
-          <button type="button" className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium" onClick={halt}>
-            {t("Ferma · {tempo}", { tempo: clock(elapsed) })}
+      {pro ? (
+        <>
+          <p className="mb-2 text-xs text-mist">{t("Si ascolta qui dentro, senza scaricarla sul telefono. Massimo 2 minuti.")}</p>
+          {clip ? <Lettore src={clip.data} /> : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {recording ? (
+              <button type="button" className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium" onClick={halt}>
+                {t("Ferma · {tempo}", { tempo: clock(elapsed) })}
+              </button>
+            ) : (
+              <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => void start()}>
+                {clip ? t("Registra di nuovo") : t("Registra nota")}<SegnoPro />
+              </button>
+            )}
+            {clip && !recording ? (
+              <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm text-danger-soft" onClick={() => onClip(null)}>
+                {t("Togli nota")}
+              </button>
+            ) : null}
+          </div>
+          {localError ? <p className="mt-2 text-xs text-brass">{localError}</p> : null}
+        </>
+      ) : (
+        <>
+          <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm text-mist" disabled>
+            {t("Registra nota")}<SegnoPro />
           </button>
-        ) : (
-          <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => void start()}>
-            {clip ? t("Registra di nuovo") : t("Registra nota")}
-          </button>
-        )}
-        {clip && !recording ? (
-          <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm text-danger-soft" onClick={() => onClip(null)}>
-            {t("Togli nota")}
-          </button>
-        ) : null}
-      </div>
-      {localError ? <p className="mt-2 text-xs text-brass">{localError}</p> : null}
+          <p className="mt-2 text-xs text-brass">{t("Disponibile con Pro")}</p>
+        </>
+      )}
     </div>
   );
 }

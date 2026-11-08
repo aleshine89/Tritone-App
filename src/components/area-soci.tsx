@@ -580,23 +580,22 @@ function TesseraSocio({
   }, [verifica]);
 
   return (
-    <article className="mt-3 overflow-hidden rounded-2xl border border-line bg-deep">
+    <article className="overflow-hidden rounded-2xl border border-line bg-deep">
       <div className="h-1.5 bg-lagoon" />
-      <div className="flex items-center gap-4 px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <span className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-abyss text-lagoon">
-              <Waves className="size-6" aria-hidden />
-              <ClubLogo id={clubId} hasLogo={hasLogo} name={club} className="absolute inset-0 h-14 w-14 bg-white object-contain" />
-            </span>
+      <div className="px-4 py-4">
+        <div className="flex items-center gap-3">
+          <span className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-abyss text-lagoon">
+            <Waves className="size-6" aria-hidden />
+            <ClubLogo id={clubId} hasLogo={hasLogo} name={club} className="absolute inset-0 h-14 w-14 bg-white object-contain" />
+          </span>
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-brass">{t("Tessera socio")}</p>
+            <p className="mt-1 text-sm text-mist">{club}</p>
           </div>
-          <p className="mt-2 text-lg font-medium">{intestatario}</p>
-          <p className="mt-1 text-sm">{t("N. {numero}", { numero })}</p>
-          <p className="mt-1 text-sm text-mist">{club}</p>
-          <p className="text-xs text-mist">{t("Anno {anno}", { anno })}</p>
         </div>
-        {src ? <img src={src} alt="" className="h-28 w-28 shrink-0 rounded-lg bg-white p-1" /> : null}
+        <p className="mt-4 text-2xl leading-tight">{intestatario}</p>
+        <p className="mt-2 text-sm">{t("N. {numero}", { numero })} · {t("Anno {anno}", { anno })}</p>
+        {src ? <img src={src} alt="" className="mx-auto mt-4 h-40 w-40 rounded-xl bg-white p-2" /> : null}
       </div>
     </article>
   );
@@ -642,19 +641,6 @@ export function IMieiDiving() {
       live = false;
     };
   }, []);
-
-  if (schermata?.tipo === "tessera") {
-    const tessera = schermata.row;
-    return (
-      <section className="mt-8">
-        <button type="button" className="min-h-11 text-sm text-lagoon" onClick={() => setSchermata(null)}>
-          {t("Indietro")}
-        </button>
-        <h2 className="mt-2 text-3xl leading-none">{t("Tessera socio")}</h2>
-        <TesseraSocio intestatario={tessera.intestatario} numero={tessera.numero} club={tessera.nome} clubId={tessera.clubId} hasLogo={tessera.hasLogo} anno={tessera.anno} verifica={tessera.verifica} />
-      </section>
-    );
-  }
 
   if (schermata?.tipo === "documenti") {
     const row = schermata.row;
@@ -704,32 +690,45 @@ export function IMieiDiving() {
                     {t("Apri scheda")}
                   </Link>
                 </div>
-              </div>
-              <div className="mt-3 rounded-2xl border border-line px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-mist">{t("Comunicazioni ai soci")}</p>
-                {row.comunicazioni.length === 0 ? <p className="mt-1 text-sm text-mist">{t("Nessuna comunicazione, per ora.")}</p> : (
-                  <ul className="mt-2 space-y-3">
-                    {row.comunicazioni.map((voce) => (
-                      <li key={voce.id}>
-                        <p className="text-sm font-medium">{voce.titolo}</p>
-                        <p className="text-xs text-mist">{formatDay(voce.quando)}</p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-mist">{voce.corpo}</p>
-                        {voce.file.length > 0 ? (
-                          <ul className="mt-2 space-y-2">
-                            {voce.file.map((allegato) => (
-                              <AllegatoComunicazione key={allegato.id} id={allegato.id} nome={allegato.nome} />
-                            ))}
-                          </ul>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="mt-3 border-t border-line pt-3">
+                  <p className="text-sm font-medium">{row.mezzoNautico ? t("Comunicazioni del Diving") : t("Comunicazioni della scuola")}</p>
+                  {row.comunicazioni.length === 0 ? <p className="mt-1 text-sm text-mist">{t("Nessuna comunicazione, per ora.")}</p> : (
+                    <ul className="mt-2 space-y-3">
+                      {row.comunicazioni.map((voce) => (
+                        <li key={voce.id}>
+                          <p className="text-sm font-medium">{voce.titolo}</p>
+                          <p className="text-xs text-mist">{formatDay(voce.quando)}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-mist">{voce.corpo}</p>
+                          {voce.file.length > 0 ? (
+                            <ul className="mt-2 space-y-2">
+                              {voce.file.map((allegato) => (
+                                <AllegatoComunicazione key={allegato.id} id={allegato.id} nome={allegato.nome} />
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             </li>
           );
         })}
       </ul>
+      {schermata?.tipo === "tessera" ? (
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-abyss px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]">
+          <div className="mx-auto flex max-w-md items-center justify-between gap-3">
+            <h2 className="text-2xl leading-none">{t("Tessera socio")}</h2>
+            <button type="button" className="min-h-11 shrink-0 rounded-full border border-line px-4 text-sm" onClick={() => setSchermata(null)}>
+              {t("Chiudi")}
+            </button>
+          </div>
+          <div className="mx-auto mt-4 max-w-md">
+            <TesseraSocio intestatario={schermata.row.intestatario} numero={schermata.row.numero} club={schermata.row.nome} clubId={schermata.row.clubId} hasLogo={schermata.row.hasLogo} anno={schermata.row.anno} verifica={schermata.row.verifica} />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -6,15 +6,15 @@ export const TESTO_SUB =
 export const TESTO_DIVING =
   "Dichiaro di aver letto e di accettare integralmente i Termini e Condizioni d'Uso, l'Informativa Privacy, le Condizioni Economiche e l'Accordo sul Trattamento dei Dati.";
 
-export const VERSIONE_SUB = "Termini 3.8, Privacy 1.4, Condizioni economiche 1.2";
-export const VERSIONE_DIVING = "Termini 3.8, Privacy 1.4, Condizioni economiche 1.2, Accordo 1.4";
+export const VERSIONE_SUB = "Termini 3.8, Privacy 1.4, Condizioni economiche 1.3";
+export const VERSIONE_DIVING = "Termini 3.8, Privacy 1.4, Condizioni economiche 1.3, Accordo 1.4";
 
 export type TipoLegale = "subacqueo" | "diving" | "gestore";
 
 export const DOCUMENTI_SUB = [
   { titolo: "Termini e Condizioni d'Uso", versione: "3.8", href: "/legali/termini-condizioni.pdf" },
   { titolo: "Informativa Privacy", versione: "1.4", href: "/legali/informativa-privacy.pdf" },
-  { titolo: "Condizioni Economiche", versione: "1.2", href: "/legali/condizioni-economiche.pdf" },
+  { titolo: "Condizioni Economiche", versione: "1.3", href: "/legali/condizioni-economiche.pdf" },
 ] as const;
 
 export const DOCUMENTO_ACCORDO = {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnteprimaFile } from "@/components/foto-vista";
+import { SegnoPro } from "@/components/segno-pro";
 import {
   clearChecklist,
   deleteChecklist,
@@ -171,7 +172,7 @@ export function ChecklistPanel({ onCount }: { onCount: (count: number) => void }
 
   return (
     <section className="mt-8">
-      <h2 className="text-2xl">{t("Checklist")}</h2>
+      <h2 className="text-2xl">{t("Checklist")}<SegnoPro /></h2>
       <p className="mt-2 text-sm text-mist">
         {t("Tutta l'attrezzatura, da spuntare prima di entrare in acqua. Puoi rinominare, togliere e aggiungere voci.")}
       </p>

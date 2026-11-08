@@ -673,9 +673,63 @@ function Emergenze() {
   const numeri = [
     { nome: "Capitaneria di Porto", numero: "1530", tel: "tel:1530" },
     { nome: "Emergenza", numero: "112", tel: "tel:112" },
-    { nome: "Vigili del fuoco", numero: "115", tel: "tel:115" },
     { nome: "DAN Europe", numero: "+39 06 4211 5685", tel: "tel:+390642115685" },
   ];
+
+  const protocolli = [
+    {
+      titolo: "Sospetta malattia da decompressione (DCS / DCI)",
+      testo: `I sintomi possono comparire da pochi minuti fino a diverse ore dopo l’emersione (dolore articolare, formicolii, debolezza, alterazioni neurologiche, stanchezza marcata, rash).
+
+Azioni immediate:
+• Valuta ABC e inizia BLS/CPR se necessario.
+• Chiama il 112 specificando “incidente subacqueo / sospetta malattia da decompressione”. Subito dopo contatta il DAN Europe (+39 06 4211 5685).
+• Posiziona la persona in decubito orizzontale (o laterale di sicurezza in caso di vomito o riduzione dello stato di coscienza).
+• Somministra ossigeno normobarico al 100% il prima possibile e continua senza interruzioni fino all’arrivo del personale sanitario.
+• Se la persona è cosciente, orientata e non vomita, consenti l’assunzione di acqua a piccoli sorsi (circa 1 litro in un’ora).
+• Evita movimenti inutili e qualsiasi tentativo di ricompressione in acqua.
+• Annota ora dell’emersione, profilo dell’immersione e sintomi.`,
+    },
+    {
+      titolo: "Embolia gassosa arteriosa (AGE)",
+      testo: `L’AGE è un’emergenza tempo-dipendente. I sintomi compaiono di solito entro pochi minuti dalla risalita (alterazione della coscienza, deficit neurologici focali, convulsioni, dolore toracico, dispnea, collasso).
+
+Azioni immediate:
+• Valuta ABC e inizia BLS/CPR se la persona non respira o non ha polso.
+• Chiama immediatamente il 112 specificando “incidente subacqueo / sospetta embolia gassosa”. Subito dopo contatta il DAN Europe (+39 06 4211 5685).
+• Posiziona la persona in decubito orizzontale (o laterale di sicurezza in caso di vomito o riduzione dello stato di coscienza). Evita la posizione Trendelenburg.
+• Somministra ossigeno normobarico al 100% il prima possibile (maschera con reservoir o demand valve) e continua senza interruzioni fino all’arrivo del personale sanitario.
+• Se la persona è cosciente, orientata e non vomita, consenti l’assunzione di acqua a piccoli sorsi.
+• Non ritardare ossigeno o allarme per manovre non essenziali. Non tentare ricompressione in acqua.
+• Annota ora precisa dell’emersione, profilo dell’immersione e evoluzione dei sintomi.
+
+Priorità assoluta: ossigeno continuo e trasporto rapido verso struttura con camera iperbarica.`,
+    },
+    {
+      titolo: "Trauma da fauna marina",
+      testo: `Organismi urticanti (meduse e simili):
+• Allontana dalla zona e risciacqua abbondantemente con acqua di mare (mai acqua dolce).
+• Rimuovi i tentacoli residui con pinzette o guanti senza strofinare la pelle.
+• Se disponibile e tollerata, applica acqua calda a 40-45 °C sulla zona per il controllo del dolore.
+• In caso di reazioni sistemiche (difficoltà respiratoria, edema importante, shock) chiama immediatamente il 112.
+
+Lesioni da spine (razze, scorfani e simili):
+• Non rimuovere spine o frammenti conficcati in profondità.
+• Controlla eventuali emorragie con compressione diretta.
+• Immergi la zona in acqua calda a 40-45 °C per il dolore, se possibile e tollerata.
+• Stabilizza, copri e recati in pronto soccorso per detersione, profilassi e valutazione (alto rischio di infezione).`,
+    },
+    {
+      titolo: "Compagno disperso",
+      testo: `Azioni immediate:
+• Fermati subito e mantieni assetto neutro.
+• Esegui una ricerca visiva a 360° (sopra, sotto e intorno), cercando anche le bolle, per massimo 1 minuto.
+• Se non localizzato, inizia una risalita controllata continuando a cercare, effettua la safety stop e lancia il pallone di segnalazione.
+• In superficie effettua un’ulteriore ricerca visiva per alcuni minuti.
+• Se il compagno non compare, avvisa immediatamente la barca o contatta Capitaneria di Porto / 112.`,
+    },
+  ];
+
   return (
     <section className="mt-6">
       <h2 className="text-2xl">{t("Emergenze")}</h2>
@@ -690,6 +744,21 @@ function Emergenze() {
           </li>
         ))}
       </ul>
+
+      <h3 className="mt-8 text-lg font-medium">{t("Protocolli di primo soccorso")}</h3>
+      <p className="mt-1 text-xs text-mist">{t("Indicazioni di primo soccorso basate su DAN. Non sostituiscono il soccorso medico.")}</p>
+      <div className="mt-4 grid gap-3">
+        {protocolli.map((p) => (
+          <details key={p.titolo} className="rounded-2xl border border-line bg-deep">
+            <summary className="min-h-16 cursor-pointer list-none px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              {t(p.titolo)}
+            </summary>
+            <div className="whitespace-pre-line border-t border-line px-4 py-3 text-sm leading-relaxed">
+              {p.testo}
+            </div>
+          </details>
+        ))}
+      </div>
     </section>
   );
 }

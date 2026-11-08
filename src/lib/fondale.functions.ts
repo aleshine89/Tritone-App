@@ -9,6 +9,7 @@ import { ACCORDO_VERSION } from "@/lib/accordo";
 import { LEGALI_PACCHETTO, copreLegali, testoDi, versioneDi, type TipoLegale } from "@/lib/legali";
 import { SCARICO_CHECKBOX, SCARICO_PACCHETTO, SCARICO_VERSIONE_LOG } from "@/lib/scarico-pianificatore";
 import { calcolaAbbonamento, entroProva, FINE_PROVA, nascitaDiving, nascitaSub, type Abbonamento, type PianoDiving, type PianoSub, type RuoloAbb } from "@/lib/abbonamento";
+import { tettoStaff } from "@/lib/prezzi";
 import { chiaveQuando, scriviUddf, type PuntoProfilo, type UddfRiga } from "@/lib/uddf";
 import { leggiNotaAnagrafica, notaAnagrafica, testoNotaAnagrafica, type NotaAnagrafica } from "@/lib/anagrafica";
 import { problemiDocumenti } from "@/lib/format";
@@ -27,6 +28,7 @@ export type Profile = {
   ruoloAbb: RuoloAbb;
   pianoAbb: PianoSub;
   provaFino: string;
+  proFino: string;
   lingua: "it" | "en";
 };
 
@@ -50,6 +52,9 @@ export type ClubPublic = {
   citta: string;
   provincia: string;
   sito: string;
+  attivoFino: string;
+  postiStaff: number;
+  postiTetto: number;
 };
 
 export type SessionContext = {
@@ -148,6 +153,9 @@ const EMPTY_CLUB: ClubPublic = {
   citta: "",
   provincia: "",
   sito: "",
+  attivoFino: "",
+  postiStaff: 0,
+  postiTetto: 0,
 };
 
 function asBool(value: unknown): boolean {
@@ -218,9 +226,24 @@ type ClubRow = {
   citta: string;
   provincia: string;
   sito: string;
+  attivo_fino: string | null;
+  posti_extra: number | null;
+  posti_limite: number | null;
 };
 
-const CLUB_FIELDS = `id, nome, codice_fiscale, sede, email, telefono, codice_staff, codice_proprietario, codice_allievi, owner_user_id, co_owner_user_id, stato, (logo_data is not null and logo_data <> '') as has_logo, accetta_moduli, accordo_version, chiave_pubblica, piano, prova_fino::text as prova_fino, mezzo_nautico, mezzo_richiesto, citta, provincia, sito`;
+const CLUB_FIELDS = `id, nome, codice_fiscale, sede, email, telefono, codice_staff, codice_proprietario, codice_allievi, owner_user_id, co_owner_user_id, stato, (logo_data is not null and logo_data <> '') as has_logo, accetta_moduli, accordo_version, chiave_pubblica, piano, prova_fino::text as prova_fino, mezzo_nautico, mezzo_richiesto, citta, provincia, sito, attivo_fino::text as attivo_fino, posti_extra, posti_limite`;
+
+async function assertPostoStaff(sql: Sql, clubId: number, gia?: string): Promise<void> {
+  if (gia) {
+    const stesso = await sql<{ user_id: string }>`select user_id from profiles where user_id = ${gia} and ruolo = 'staff' and club_id = ${clubId}`;
+    if (stesso[0]) return;
+  }
+  const club = await loadClubById(sql, clubId);
+  if (!club) throw new Error("Scuola non trovata.");
+  const conta = await sql<{ n: number }>`select count(*)::int as n from profiles where club_id = ${clubId} and ruolo = 'staff'`;
+  const tetto = tettoStaff(club.mezzo_nautico == null ? true : asBool(club.mezzo_nautico), club.posti_limite == null ? null : Number(club.posti_limite), Number(club.posti_extra ?? 0));
+  if (Number(conta[0]?.n ?? 0) >= tetto) throw new Error("Posti Pro staff esauriti. Il titolare può aggiungerne uno a 8 €.");
+}
 
 async function loadClubById(sql: Sql, clubId: number): Promise<ClubRow | null> {
   const rows = await sql.query<ClubRow>(`select ${CLUB_FIELDS} from club where id = $1`, [clubId]);
@@ -287,6 +310,9 @@ function toClub(row: ClubRow | null, mode: "owner" | "staff" | "diver" | "none")
     citta: row.citta ?? "",
     provincia: row.provincia ?? "",
     sito: row.sito ?? "",
+    attivoFino: (row.attivo_fino ?? "").slice(0, 10),
+    postiStaff: 0,
+    postiTetto: tettoStaff(row.mezzo_nautico == null ? true : asBool(row.mezzo_nautico), row.posti_limite == null ? null : Number(row.posti_limite), Number(row.posti_extra ?? 0)),
   };
 }
 
@@ -305,12 +331,13 @@ async function loadProfile(sql: Sql, userId: string): Promise<Profile | null> {
     ruolo: string | null;
     piano: string | null;
     prova_fino: string | null;
+    pro_fino: string | null;
     lingua: string | null;
   }>`select p.user_id, p.role, p.nome, p.cognome, p.telefono, p.club_id, a.version as privacy_version,
       r.version as responsabilita_version,
       (g.user_id is not null) as guida_ok,
       (p.foto_data is not null and p.foto_data <> '') as has_foto,
-      p.ruolo, p.piano, p.prova_fino::text as prova_fino, p.lingua
+      p.ruolo, p.piano, p.prova_fino::text as prova_fino, p.pro_fino::text as pro_fino, p.lingua
       from profiles p
       left join privacy_accettazioni a on a.user_id = p.user_id
       left join responsabilita_accettazioni r on r.user_id = p.user_id
@@ -332,6 +359,7 @@ async function loadProfile(sql: Sql, userId: string): Promise<Profile | null> {
     ruoloAbb: ruoloAbb(row.ruolo),
     pianoAbb: pianoSub(row.piano),
     provaFino: row.prova_fino ?? "",
+    proFino: (row.pro_fino ?? "").slice(0, 10),
     lingua: row.lingua === "en" ? "en" : "it",
   };
 }
@@ -349,7 +377,7 @@ function pianoDiving(value: string | null | undefined): PianoDiving {
 }
 
 function abbonamentoDi(profile: Profile | null, club: ClubRow | null, oggi: string): Abbonamento {
-  return calcolaAbbonamento({
+  const stato = calcolaAbbonamento({
     ruolo: profile?.ruoloAbb ?? "",
     piano: profile?.pianoAbb ?? "",
     provaFino: profile?.provaFino ?? "",
@@ -359,6 +387,12 @@ function abbonamentoDi(profile: Profile | null, club: ClubRow | null, oggi: stri
     oggi,
     esente: profile?.role === "piattaforma",
   });
+  const proScaduto = profile?.pianoAbb === "pro" && Boolean(profile.proFino) && profile.proFino < oggi;
+  const scuolaScaduta = Boolean(club?.piano === "active" && club.attivo_fino && club.attivo_fino.slice(0, 10) < oggi);
+  if (!proScaduto && !scuolaScaduta) return stato;
+  const scuolaAperta = scuolaScaduta ? false : stato.scuolaAperta;
+  const proAperto = proScaduto && stato.ruolo === "sub" ? false : scuolaScaduta && stato.ruolo !== "sub" ? false : stato.proAperto;
+  return { ...stato, scuolaAperta, proAperto };
 }
 
 export async function requirePro(sql: Sql, userId: string) {
@@ -579,9 +613,14 @@ async function pack(sql: Sql, userId: string): Promise<SessionContext> {
   const esito = await unreadEsito(sql, userId);
   const tipoLegale = profile ? tipoLegaleDi(profile, clubRow, userId) : "subacqueo";
   const accettati = profile ? await legaliAccettati(sql, userId) : [];
+  const club = toClub(clubRow, mode);
+  if (clubRow) {
+    const conta = await sql<{ n: number }>`select count(*)::int as n from profiles where club_id = ${clubRow.id} and ruolo = 'staff'`;
+    club.postiStaff = Number(conta[0]?.n ?? 0);
+  }
   return {
     profile,
-    club: toClub(clubRow, mode),
+    club,
     clubReady: platform || Boolean(clubRow),
     hasInstructor: staff,
     owner,
@@ -939,6 +978,7 @@ export const createProfile = createServerFn({ method: "POST" })
       clubId = null;
     } else if (data.role === "istruttore") {
       const club = await matchAccessCode(sql, data.codice);
+      await assertPostoStaff(sql, Number(club.id));
       clubId = Number(club.id);
     } else {
       const rows = await sql<{ codice: string; owner_user_id: string | null }>`
@@ -2640,11 +2680,13 @@ export type LogEntry = {
   foto: number;
   voce: number;
   condivisaDa: string;
+  decompressione: "" | "si" | "no";
+  profilo: PuntoProfilo[];
 };
 
 const MIXES = ["Aria", "Nitrox", "Trimix"] as const;
 
-function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" | "condivisaDa"> & { id: number | null } {
+function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" | "condivisaDa" | "profilo"> & { id: number | null } {
   const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const id = Number(raw.id);
   const data = asText(raw.data).slice(0, 10);
@@ -2663,6 +2705,8 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" 
   const lat = coord(raw.lat, -90, 90);
   const lng = coord(raw.lng, -180, 180);
   if ((lat && !lng) || (!lat && lng)) throw new Error("Servono sia latitudine sia longitudine.");
+  const decompressione = asText(raw.decompressione);
+  if (decompressione !== "" && decompressione !== "si" && decompressione !== "no") throw new Error("Scegli se c'è stata decompressione.");
   return {
     id: Number.isInteger(id) && id > 0 ? id : null,
     data,
@@ -2678,6 +2722,7 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" 
     note: asText(raw.note).trim().slice(0, 2000),
     lat,
     lng,
+    decompressione,
   };
 }
 
@@ -2709,7 +2754,10 @@ function toLog(row: {
   foto: number;
   voce: number;
   condivisa_da: string;
+  dive_profile: string;
+  decompressione: string;
 }): LogEntry {
+  const profilo = profiloDi(profiloJson(row.dive_profile));
   return {
     id: Number(row.id),
     data: row.dive_date.slice(0, 10),
@@ -2729,6 +2777,8 @@ function toLog(row: {
     foto: Number(row.foto ?? 0),
     voce: Number(row.voce ?? 0),
     condivisaDa: row.condivisa_da ?? "",
+    decompressione: row.decompressione === "si" || row.decompressione === "no" ? row.decompressione : "",
+    profilo,
   };
 }
 
@@ -2774,8 +2824,10 @@ export const listLogbook = createServerFn({ method: "POST" })
       foto: number;
       voce: number;
       condivisa_da: string;
+      dive_profile: string;
+      decompressione: string;
     }>`
-      select id, dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da,
+      select id, dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da, dive_profile, decompressione,
         (select count(*)::int from logbook_photos p where p.entry_id = logbook_entries.id) as foto,
         (select count(*)::int from logbook_voice v where v.entry_id = logbook_entries.id) as voce
       from logbook_entries
@@ -2793,6 +2845,7 @@ export const saveLogbook = createServerFn({ method: "POST" })
     const sql = await getSql();
     const profile = await loadProfile(sql, context.userId);
     if (!profile) throw new Error("Completa prima il profilo.");
+    if (data.decompressione !== "si" && data.decompressione !== "no") throw new Error("Scegli se c'è stata decompressione.");
     if (data.id) {
       const owned = await sql<{ id: number }>`
         select id from logbook_entries where id = ${data.id} and user_id = ${context.userId}
@@ -2813,6 +2866,7 @@ export const saveLogbook = createServerFn({ method: "POST" })
             notes = ${data.note},
             lat = ${data.lat},
             lng = ${data.lng},
+            decompressione = ${data.decompressione},
             updated_at = now()
         where id = ${data.id} and user_id = ${context.userId}
       `;
@@ -2820,11 +2874,11 @@ export const saveLogbook = createServerFn({ method: "POST" })
     }
     const inserted = await sql<{ id: number }>`
       insert into logbook_entries (
-        user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng
+        user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, decompressione
       ) values (
         ${context.userId}, ${data.data}, ${data.localita}, ${data.punto}, ${data.profondita},
         ${data.minuti}, ${data.buddy}, ${data.miscela}, ${data.ossigeno}, ${data.temperatura},
-        ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}
+        ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}, ${data.decompressione}
       )
       returning id
     `;
@@ -2848,6 +2902,7 @@ export type ImmersioneCopia = {
   lat: string;
   lng: string;
   ora: string;
+  decompressione: "" | "si" | "no";
 };
 
 function leggiCopia(input: unknown): ImmersioneCopia {
@@ -2869,6 +2924,7 @@ function leggiCopia(input: unknown): ImmersioneCopia {
     lat: base.lat,
     lng: base.lng,
     ora: /^([01]\d|2[0-3]):[0-5]\d$/.test(oraRaw) ? oraRaw : "",
+    decompressione: base.decompressione,
   };
 }
 
@@ -2887,11 +2943,11 @@ function copiaDaRiga(value: unknown): ImmersioneCopia {
 async function inserisciCopia(sql: Sql, userId: string, copia: ImmersioneCopia, da: string): Promise<number> {
   const inserted = await sql<{ id: number }>`
     insert into logbook_entries (
-      user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da
+      user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da, decompressione
     ) values (
       ${userId}, ${copia.data}, ${copia.localita}, ${copia.punto}, ${copia.profondita},
       ${copia.minuti}, ${copia.buddy}, ${copia.miscela}, ${copia.ossigeno}, ${copia.temperatura},
-      ${copia.visibilita}, ${copia.note}, ${copia.lat}, ${copia.lng}, ${copia.ora}, ${da.slice(0, 120)}
+      ${copia.visibilita}, ${copia.note}, ${copia.lat}, ${copia.lng}, ${copia.ora}, ${da.slice(0, 120)}, ${copia.decompressione}
     )
     returning id
   `;
@@ -2960,8 +3016,9 @@ export const condividiImmersione = createServerFn({ method: "POST" })
       lat: string;
       lng: string;
       dive_time: string;
+      decompressione: string;
     }>`
-      select dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time
+      select dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, decompressione
       from logbook_entries
       where id = ${data.entryId} and user_id = ${context.userId}
     `;
@@ -2982,6 +3039,7 @@ export const condividiImmersione = createServerFn({ method: "POST" })
       lat: riga.lat ?? "",
       lng: riga.lng ?? "",
       ora: (riga.dive_time ?? "").slice(0, 5),
+      decompressione: riga.decompressione === "si" || riga.decompressione === "no" ? riga.decompressione : "",
     };
     const da = `${profile.nome} ${profile.cognome}`.trim() || "Un subacqueo";
     const json = JSON.stringify(copia);
@@ -3057,6 +3115,7 @@ export const accettaCondivisione = createServerFn({ method: "POST" })
     const row = rows[0];
     if (!row) throw new Error("Questa immersione non è più in attesa.");
     const copia = data.immersione ?? copiaDaRiga(row.payload);
+    if (copia.decompressione !== "si" && copia.decompressione !== "no") throw new Error("Scegli se c'è stata decompressione.");
     const savedId = await inserisciCopia(sql, context.userId, copia, row.from_name);
     await sql`
       update logbook_condivisioni
@@ -3364,6 +3423,7 @@ export const addLogPhoto = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }): Promise<{ id: number }> => {
     const sql = await getSql();
+    await requireSpeciePro(sql, context.userId);
     const owned = await sql<{ id: number }>`
       select id from logbook_entries where id = ${data.entryId} and user_id = ${context.userId}
     `;
@@ -3440,6 +3500,7 @@ export const saveLogVoice = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }): Promise<{ ok: true }> => {
     const sql = await getSql();
+    await requireSpeciePro(sql, context.userId);
     const owned = await sql<{ id: number }>`
       select id from logbook_entries where id = ${data.entryId} and user_id = ${context.userId}
     `;
@@ -4447,7 +4508,9 @@ export const setClubLogo = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     if (!input || typeof input !== "object") throw new Error("Dati mancanti.");
     const logo = asText((input as { logo?: unknown }).logo).trim();
-    if (logo && (!logo.startsWith("data:image/jpeg;base64,") || logo.length > 160_000)) {
+    const jpeg = logo.startsWith("data:image/jpeg;base64,");
+    const png = logo.startsWith("data:image/png;base64,");
+    if (logo && ((!jpeg && !png) || logo.length > 160_000)) {
       throw new Error("Il logo è troppo grande. Riprova con un'immagine più piccola.");
     }
     return { logo };
@@ -5594,6 +5657,7 @@ export const impostaAccountAbbonamento = createServerFn({ method: "POST" })
       return { ok: true };
     }
     if (data.ruolo === "staff") {
+      await assertPostoStaff(sql, data.scuolaId, data.id);
       const rows = await sql<{ user_id: string }>`
         with scelto as (
           select id from club where id = ${data.scuolaId}
@@ -8269,6 +8333,7 @@ export type MioDiving = {
   intestatario: string;
   verifica: string;
   hasLogo: boolean;
+  mezzoNautico: boolean;
   comunicazioni: { id: number; titolo: string; corpo: string; quando: string; file: { id: number; nome: string }[] }[];
 };
 
@@ -8529,6 +8594,7 @@ export const mieiDiving = createServerFn({ method: "POST" })
       nome_socio: string;
       cognome_socio: string;
       has_logo: boolean | string | null;
+      mezzo_nautico: boolean | string | null;
       socio_id: number;
       verifica: string | null;
     }>`
@@ -8537,6 +8603,7 @@ export const mieiDiving = createServerFn({ method: "POST" })
              coalesce(nullif(btrim(sub.payload->>'nome'), ''), p.nome) as nome_socio,
              coalesce(nullif(btrim(sub.payload->>'cognome'), ''), p.cognome) as cognome_socio,
              (c.logo_data is not null and c.logo_data <> '') as has_logo,
+             c.mezzo_nautico,
              s.id as socio_id, s.verifica
       from soci s
       join club c on c.id = s.club_id
@@ -8594,6 +8661,7 @@ export const mieiDiving = createServerFn({ method: "POST" })
         intestatario,
         verifica: await assicuraVerifica(sql, Number(row.socio_id), row.verifica),
         hasLogo: asBool(row.has_logo),
+        mezzoNautico: row.mezzo_nautico == null ? true : asBool(row.mezzo_nautico),
         comunicazioni: perScheda.get(Number(row.submission_id)) ?? [],
       };
     }));

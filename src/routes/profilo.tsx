@@ -18,6 +18,7 @@ import { attivaNotificheTelefono, ascoltaNotificheTelefono, disattivaNotificheTe
 import { prepareLogo } from "@/lib/prepare-file";
 import { LinguaAccount } from "@/components/lingua-account";
 import { messaggioErrore, useT } from "@/lib/i18n";
+import { FINE_PROVA } from "@/lib/abbonamento";
 import { SCARICO_DATA, SCARICO_TITOLO, SCARICO_VERSIONE } from "@/lib/scarico-pianificatore";
 
 export const Route = createFileRoute("/profilo")({ component: Page });
@@ -108,6 +109,11 @@ function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mt-2 text-3xl leading-none">{t("Profilo")}</h1>
+      {frame.abbonamento.ruolo === "sub" ? (
+        <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: undefined }} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brass px-4 text-sm font-medium text-ink">
+          {frame.profile?.pianoAbb === "pro" ? t("Rinnova Pro") : t("Attiva Pro")}
+        </Link>
+      ) : null}
       <LinguaAccount />
       {frame.abbonamento.riga ? <p className="mt-3 text-sm text-brass">{t(frame.abbonamento.riga)}</p> : null}
       <form
@@ -206,19 +212,24 @@ function ProfilePage() {
         {frame.platform || owner ? null : (
           <>
             <CodiceStaff onDone={() => frame.refresh()} />
+          </>
+        )}
+        {profile?.role === "subacqueo" || owner ? (
             <AffiliaDiving
               nome={nome}
               cognome={cognome}
               telefono={telefono}
               email={frame.email ?? ""}
               anagrafica={ana}
+              giaTitolare={Boolean(owner)}
+              nomeAttivita={frame.club.nome}
+              mezzoNautico={frame.club.mezzoNautico}
               onDone={async () => {
                 frame.setComeCliente(false);
                 await frame.refresh();
               }}
             />
-          </>
-        )}
+        ) : null}
 
       {frame.platform ? (
         <details className="mt-10 border-t border-line pt-6">
@@ -283,6 +294,10 @@ function ProfilePage() {
             </Pair>
             <Input label="Email" value={email} onChange={setEmail} />
             <Input label="Codice staff" value={codice} onChange={setCodice} hint="L'unico codice da dare a istruttori e guide." />
+            <p className="text-sm text-mist">{t("Account Pro staff: {usati}/{tetto}", { usati: frame.club.postiStaff, tetto: frame.club.postiTetto })}</p>
+            <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "posto" }} className="inline-flex min-h-11 items-center text-sm text-brass">
+              {t("Aggiungi posto Pro — 8 €")}
+            </Link>
             <div className="flex flex-wrap gap-2">
               <button type="submit" disabled={busy} className="min-h-11 rounded-full border border-line px-5 text-sm disabled:opacity-60">
                 {t("Salva scuola")}
@@ -805,7 +820,7 @@ function DatiPersonali() {
           {busy === "scarica" ? t("Preparo il file…") : t("Scarica i miei dati")}
         </button>
         <button type="button" disabled={busy !== null} onClick={() => void chiudi()} className="min-h-11 rounded-full border border-line px-4 text-sm text-brass disabled:opacity-60">
-          {busy === "chiudi" ? t("Chiudo…") : t("Elimina account")}
+          {busy === "chiudi" ? t("Chiudo…") : <><span aria-hidden="true" className="inline-block align-middle text-3xl leading-none text-[#FFCC00]">⚠</span> {t("Elimina account")} <span aria-hidden="true" className="inline-block align-middle text-3xl leading-none text-[#FFCC00]">⚠</span></>}
         </button>
       </div>
       {note ? <p className="mt-3 text-sm text-brass">{t(note)}</p> : null}
@@ -1310,6 +1325,9 @@ function AffiliaDiving({
   telefono,
   email,
   anagrafica,
+  giaTitolare,
+  nomeAttivita,
+  mezzoNautico,
   onDone,
 }: {
   nome: string;
@@ -1317,6 +1335,9 @@ function AffiliaDiving({
   telefono: string;
   email: string;
   anagrafica: Record<string, string>;
+  giaTitolare: boolean;
+  nomeAttivita: string;
+  mezzoNautico: boolean;
   onDone: () => Promise<void>;
 }) {
   const t = useT();
@@ -1330,6 +1351,7 @@ function AffiliaDiving({
   const [phone, setPhone] = useState(telefono);
   const [codice, setCodice] = useState("");
   const [mezzo, setMezzo] = useState<boolean | null>(null);
+  const [bonifico, setBonifico] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -1346,19 +1368,29 @@ function AffiliaDiving({
   }, []);
 
   const aperta = richiesta && richiesta.stato !== "accettata";
+  const oggi = new Date().toISOString().slice(0, 10);
+  const inProva = oggi <= FINE_PROVA;
 
   return (
     <section className="mt-10 space-y-3 border-t border-line pt-6">
-      <h2 className="text-2xl">{t("Affilia diving center")}</h2>
+      <h2 className="text-2xl">{t("Apri un'attività")}</h2>
       <p className="text-sm text-mist">
-        {t("Dal profilo puoi chiedere di aprire un diving. Il gestore riceve i dati e ti manda un codice. Con quel codice diventi titolare.")}
+        {t("Dal profilo puoi chiedere di aprire un'attività. Il gestore riceve i dati e ti manda un codice. Con quel codice diventi titolare.")}
       </p>
-      {aperta ? (
+      {giaTitolare ? (
+        <div className="rounded-card border border-line bg-surface p-4 text-sm">
+          <p>
+            {mezzoNautico
+              ? t("Sei già titolare di un diving{nome}. Non puoi aprirne un'altra.", { nome: nomeAttivita ? `: ${nomeAttivita}` : "" })
+              : t("Sei già titolare di una scuola/club{nome}. Non puoi aprirne un'altra.", { nome: nomeAttivita ? `: ${nomeAttivita}` : "" })}
+          </p>
+        </div>
+      ) : aperta ? (
         <div className="rounded-card border border-line bg-surface p-4 text-sm">
           <p>{richiesta.stato === "codice-inviato" ? t("Il gestore ha preparato il codice. Inseriscilo qui.") : t("Richiesta inviata. Il gestore la sta leggendo.")}</p>
           <p className="mt-2 text-mist">
             {richiesta.divingNome} · {richiesta.sede}
-            {richiesta.mezzoNautico == null ? "" : ` · ${richiesta.mezzoNautico ? t("Diving con mezzo nautico") : t("Scuola/Club senza mezzo nautico")}`}
+            {richiesta.mezzoNautico == null ? "" : ` · ${richiesta.mezzoNautico ? t("Attività con mezzo nautico (Diving)") : t("Attività senza mezzo nautico (Club / Scuola)")}`}
           </p>
         </div>
       ) : (
@@ -1375,7 +1407,7 @@ function AffiliaDiving({
               return;
             }
             if (mezzo == null) {
-              setNote("Scegli il tipo di centro.");
+              setNote("Scegli il tipo di attività.");
               setBusy(false);
               return;
             }
@@ -1402,6 +1434,60 @@ function AffiliaDiving({
               .finally(() => setBusy(false));
           }}
         >
+          <fieldset className="space-y-2">
+            <legend className="text-sm">{t("Che attività vuoi aprire?")}</legend>
+            <button
+              type="button"
+              className={`min-h-11 w-full rounded-2xl px-4 text-left text-sm ${mezzo === true ? "bg-lagoon font-medium" : "border border-line"}`}
+              onClick={() => { setMezzo(true); setBonifico(false); }}
+            >
+              {t("Attività con mezzo nautico (Diving)")}
+            </button>
+            <button
+              type="button"
+              className={`min-h-11 w-full rounded-2xl px-4 text-left text-sm ${mezzo === false ? "bg-lagoon font-medium" : "border border-line"}`}
+              onClick={() => { setMezzo(false); setBonifico(false); }}
+            >
+              {t("Attività senza mezzo nautico (Club / Scuola)")}
+            </button>
+          </fieldset>
+          {mezzo == null ? null : inProva ? (
+            <div className="rounded-card border border-line bg-surface p-4 text-sm">
+              <p className="font-medium">{t("Periodo di prova gratuito")}</p>
+              <p className="mt-2">{t("Fino al 31 marzo 2027 l'attivazione dell'attività è gratuita.")}</p>
+              <p className="mt-2">{t("Dopo questa data sarà richiesto il pagamento annuale.")}</p>
+              <p className="mt-2">{t("Puoi procedere con l'apertura.")}</p>
+            </div>
+          ) : (
+            <div className="rounded-card border border-line bg-surface p-4 text-sm">
+              {mezzo ? (
+                <>
+                  <p className="font-medium">{t("Piano Diving – 190,00 € / anno")}</p>
+                  <p className="mt-2">{t("Per attivare il tuo centro con mezzo nautico, effettua un bonifico di 190,00 € a:")}</p>
+                  <p className="mt-2">{t("IBAN: IT87H0366901600428871577626")}</p>
+                  <p>{t("Intestatario: Mogliani Alessandro")}</p>
+                  <p>{t("Causale: Tritone – Piano Diving – [Nome del tuo centro]")}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium">{t("Piano Club / Scuola – 80,00 € / anno")}</p>
+                  <p className="mt-2">{t("Per attivare la tua attività senza mezzo nautico, effettua un bonifico di 80,00 € a:")}</p>
+                  <p className="mt-2">{t("IBAN: IT87H0366901600428871577626")}</p>
+                  <p>{t("Intestatario: Mogliani Alessandro")}</p>
+                  <p>{t("Causale: Tritone – Piano Club – [Nome del tuo centro]")}</p>
+                </>
+              )}
+              <p className="mt-2">{t("Una volta ricevuto il pagamento, il piano verrà attivato entro 24 ore.")}</p>
+              <button
+                type="button"
+                className="mt-3 min-h-11 rounded-full border border-line px-4 text-sm"
+                onClick={() => setBonifico(true)}
+              >
+                {t("Ho effettuato il bonifico")}
+              </button>
+              {bonifico ? <p className="mt-3">{t("Grazie! Verificheremo il pagamento e attiveremo il piano il prima possibile.")}</p> : null}
+            </div>
+          )}
           <Input label="Nome" value={first} onChange={setFirst} />
           <Input label="Cognome" value={last} onChange={setLast} />
           <Input label="Mail" value={mail} onChange={setMail} />
@@ -1409,23 +1495,6 @@ function AffiliaDiving({
           <Input label="Nome diving" value={divingNome} onChange={setDivingNome} />
           <Input label="Indirizzo diving" value={sede} onChange={setSede} />
           <Input label="Codice fiscale diving" value={cf} onChange={setCf} />
-          <fieldset className="space-y-2">
-            <legend className="text-sm">{t("Tipo di centro")}</legend>
-            <button
-              type="button"
-              className={`min-h-11 w-full rounded-2xl px-4 text-left text-sm ${mezzo === true ? "bg-lagoon font-medium" : "border border-line"}`}
-              onClick={() => setMezzo(true)}
-            >
-              {t("Diving con mezzo nautico")}
-            </button>
-            <button
-              type="button"
-              className={`min-h-11 w-full rounded-2xl px-4 text-left text-sm ${mezzo === false ? "bg-lagoon font-medium" : "border border-line"}`}
-              onClick={() => setMezzo(false)}
-            >
-              {t("Scuola/Club senza mezzo nautico")}
-            </button>
-          </fieldset>
           <button type="submit" disabled={busy} className="min-h-11 rounded-full bg-lagoon px-5 text-sm font-medium disabled:opacity-60">
             {busy ? t("Invio…") : t("Invia richiesta")}
           </button>

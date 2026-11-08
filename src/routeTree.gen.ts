@@ -23,6 +23,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ModuliRouteImport } from './routes/moduli'
 import { Route as NotificheRouteImport } from './routes/notifiche'
 import { Route as PersonaleRouteImport } from './routes/personale'
+import { Route as PianoRouteImport } from './routes/piano'
 import { Route as ProfiloRouteImport } from './routes/profilo'
 import { Route as SmileRouteImport } from './routes/smile'
 import { Route as SociRouteImport } from './routes/soci'
@@ -102,6 +103,11 @@ const PersonaleRoute = PersonaleRouteImport.update({
   path: '/personale',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PianoRoute = PianoRouteImport.update({
+  id: '/piano',
+  path: '/piano',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfiloRoute = ProfiloRouteImport.update({
   id: '/profilo',
   path: '/profilo',
@@ -158,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/moduli': typeof ModuliRoute
   '/notifiche': typeof NotificheRoute
   '/personale': typeof PersonaleRoute
+  '/piano': typeof PianoRoute
   '/profilo': typeof ProfiloRoute
   '/smile': typeof SmileRoute
   '/soci': typeof SociRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/moduli': typeof ModuliRoute
   '/notifiche': typeof NotificheRoute
   '/personale': typeof PersonaleRoute
+  '/piano': typeof PianoRoute
   '/profilo': typeof ProfiloRoute
   '/smile': typeof SmileRoute
   '/soci': typeof SociRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/moduli': typeof ModuliRoute
   '/notifiche': typeof NotificheRoute
   '/personale': typeof PersonaleRoute
+  '/piano': typeof PianoRoute
   '/profilo': typeof ProfiloRoute
   '/smile': typeof SmileRoute
   '/soci': typeof SociRoute
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/moduli'
     | '/notifiche'
     | '/personale'
+    | '/piano'
     | '/profilo'
     | '/smile'
     | '/soci'
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
     | '/moduli'
     | '/notifiche'
     | '/personale'
+    | '/piano'
     | '/profilo'
     | '/smile'
     | '/soci'
@@ -281,6 +292,7 @@ export interface FileRouteTypes {
     | '/moduli'
     | '/notifiche'
     | '/personale'
+    | '/piano'
     | '/profilo'
     | '/smile'
     | '/soci'
@@ -306,6 +318,7 @@ export interface RootRouteChildren {
   ModuliRoute: typeof ModuliRoute
   NotificheRoute: typeof NotificheRoute
   PersonaleRoute: typeof PersonaleRoute
+  PianoRoute: typeof PianoRoute
   ProfiloRoute: typeof ProfiloRoute
   SmileRoute: typeof SmileRoute
   SociRoute: typeof SociRoute
@@ -416,6 +429,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PersonaleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/piano': {
+      id: '/piano'
+      path: '/piano'
+      fullPath: '/piano'
+      preLoaderRoute: typeof PianoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profilo': {
       id: '/profilo'
       path: '/profilo'
@@ -490,6 +510,7 @@ const rootRouteChildren: RootRouteChildren = {
   ModuliRoute: ModuliRoute,
   NotificheRoute: NotificheRoute,
   PersonaleRoute: PersonaleRoute,
+  PianoRoute: PianoRoute,
   ProfiloRoute: ProfiloRoute,
   SmileRoute: SmileRoute,
   SociRoute: SociRoute,

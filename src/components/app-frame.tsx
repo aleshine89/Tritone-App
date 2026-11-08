@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, BookOpen, ClipboardList, LogOut, Settings, Waves } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -8,6 +8,8 @@ import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user
 import { avvisaScadenze } from "@/lib/avvisi-scadenza";
 import { ClubLogo } from "@/components/club-logo";
 import { Copyright } from "@/components/copyright";
+import { MascheraPro } from "@/components/maschera-pro";
+import { entroUnMese } from "@/lib/prezzi";
 import { createProfile, getSessionContext, listScadenze, accettaInformativa, accettaAccordo, accettaResponsabilita, type SessionContext } from "@/lib/fondale.functions";
 import { TESTO_RESPONSABILITA } from "@/lib/responsabilita";
 import { TestoInformativa } from "@/components/informativa";
@@ -22,6 +24,7 @@ import {
 } from "@/lib/push-client";
 import { ROLE_LABEL, isStaff, type Role } from "@/lib/forms";
 import { messaggioErrore, useLingua, useT } from "@/lib/i18n";
+import { formatDay } from "@/lib/format";
 
 type Frame = SessionContext & {
   email: string | null;
@@ -508,6 +511,7 @@ function Shell({ children }: { children: ReactNode }) {
       <div className="min-w-0">
         <BarraTipi />
         <RigaNome conto={conto} path={path} />
+        <AvvisoRinnovo />
         <PrimaVolta />
         <main className="px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:px-8 md:pb-12">{children}{path === "/" ? <p className="mt-8 text-center text-[11px] leading-snug text-mist">Software registrato SIAE – Registro Pubblico Speciale per i programmi per elaboratore<br />TRITONE - LA VOCE DEL MARE · Numero di registrazione: D000030864 – 27/10/2026 · Numero progressivo: D000032389 · Pubblicazione: 07/10/2026</p> : null}<Copyright className={path === "/" ? "mt-3" : "mt-10"} /></main>
       </div>
@@ -629,6 +633,72 @@ function BarraTipi() {
   );
 }
 
+function AvvisoRinnovo() {
+  const t = useT();
+  const frame = useFondale();
+  const [aperto, setAperto] = useState(false);
+  const mostra = frame.owner && !frame.comeCliente && entroUnMese(frame.oggi, frame.club.attivoFino);
+  useEffect(() => {
+    if (!mostra) return;
+    const chiave = `tritone-rinnovo-${frame.club.attivoFino}`;
+    if (sessionStorage.getItem(chiave)) return;
+    sessionStorage.setItem(chiave, "1");
+    setAperto(true);
+  }, [mostra, frame.club.attivoFino]);
+  if (!aperto) return null;
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-end bg-ink/70 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:place-items-center">
+      <div className="w-full max-w-md rounded-2xl border border-brass bg-deep p-4">
+        <h2 className="text-2xl">{t("Rinnova piano")}</h2>
+        <p className="mt-2 text-sm text-mist">{t("Il piano annuale scade il {data}.", { data: formatDay(frame.club.attivoFino) })}</p>
+        <div className="mt-4 flex gap-2">
+          <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "struttura" }} className="inline-flex min-h-11 items-center rounded-full bg-brass px-4 text-sm font-medium text-ink">
+            {t("Rinnova piano")}
+          </Link>
+          <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => setAperto(false)}>
+            {t("Chiudi")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NomeIntero({ nome, pro, argento }: { nome: string; pro?: boolean; argento?: boolean }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const [passo, setPasso] = useState(0);
+  const misure = ["text-3xl", "text-2xl", "text-xl", "text-lg", "text-base", "text-sm"];
+  useLayoutEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const adatta = () => {
+      const el = ref.current;
+      const contenitore = box.current;
+      if (!el || !contenitore) return;
+      let scelto = misure.length - 1;
+      for (let i = 0; i < misure.length; i += 1) {
+        el.className = `whitespace-nowrap leading-none ${misure[i]}`;
+        if (contenitore.scrollWidth <= contenitore.clientWidth + 1) {
+          scelto = i;
+          break;
+        }
+      }
+      setPasso(scelto);
+    };
+    adatta();
+    const osserva = new ResizeObserver(adatta);
+    osserva.observe(node);
+    return () => osserva.disconnect();
+  }, [nome, pro]);
+  return (
+    <div ref={box} className="flex min-w-0 flex-1 items-center gap-1.5">
+      <p ref={ref} className={`whitespace-nowrap leading-none ${misure[passo]}`}>{nome}</p>
+      {pro ? <MascheraPro className="size-8" argento={argento} /> : null}
+    </div>
+  );
+}
+
 function RigaNome({ conto, path }: { conto: number; path: string }) {
   const t = useT();
   const frame = useFondale();
@@ -640,11 +710,15 @@ function RigaNome({ conto, path }: { conto: number; path: string }) {
 
   return (
     <div className="no-print flex items-center justify-between gap-3 border-b border-line bg-deep px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {nelDiving ? (
           <ClubLogo id={frame.club.id} hasLogo={frame.club.hasLogo} name={frame.club.nome} className="h-12 w-12 shrink-0 rounded-2xl bg-white object-contain" />
         ) : null}
-        <p className="min-w-0 truncate text-3xl leading-none">{nome}</p>
+        <NomeIntero
+          nome={nome}
+          pro={!nelDiving && frame.abbonamento.proAperto}
+          argento={frame.abbonamento.ruolo === "staff" && frame.profile?.pianoAbb !== "pro"}
+        />
       </div>
       <div className="flex shrink-0 items-center">
         <Link

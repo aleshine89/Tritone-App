@@ -7,6 +7,7 @@ import { inviaCodiceAffiliazione, listAffiliazioni, listChiusure, listRichiesteM
 import { formByKey } from "@/lib/forms";
 import { formatDay } from "@/lib/format";
 import { messaggioErrore, useT, type Traduci } from "@/lib/i18n";
+import { RegistroPagamenti } from "@/components/registro-pagamenti";
 import type { NotaAnagrafica } from "@/lib/anagrafica";
 
 export function Gestione() {
@@ -70,6 +71,7 @@ export function Gestione() {
       <p className="mt-2 text-sm text-mist">
         {rows ? t("{attive} attive su {totale}", { attive, totale: rows.length }) : t("Carico le scuole…")}. {t("Vedi le scuole, non i loro moduli. Ogni diving ha un titolare.")}
       </p>
+      <RegistroPagamenti />
       <button
         type="button"
         disabled={copiando}

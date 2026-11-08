@@ -1,6 +1,7 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Navigate } from "@tanstack/react-router";
-import { authEnabled, signInGoogle, signOut } from "./client";
+import { GROK_PROVIDERS, authEnabled, signIn, signInGoogle, signOut } from "./client";
+import { googleDirettoAttivo } from "./google-mode";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
@@ -64,15 +65,34 @@ export function SignInGate({
 }
 
 export function SignInButtons() {
+  const [googleNuovo, setGoogleNuovo] = useState<boolean | null>(null);
+  useEffect(() => {
+    void googleDirettoAttivo()
+      .then((diretto) => setGoogleNuovo(diretto))
+      .catch(() => setGoogleNuovo(false));
+  }, []);
   return (
     <div className="flex w-full max-w-sm flex-col gap-2">
-      <button
-        type="button"
-        onClick={() => void signInGoogle({ callbackURL: "/" })}
-        className="w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-      >
-        Continue with Google
-      </button>
+      {googleNuovo ? (
+        <button
+          type="button"
+          onClick={() => void signInGoogle({ callbackURL: "/" })}
+          className="w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Continue with Google
+        </button>
+      ) : googleNuovo === false ? (
+        GROK_PROVIDERS.map((p) => (
+          <button
+            key={p.providerId}
+            type="button"
+            onClick={() => signIn(p.providerId, { callbackURL: "/" })}
+            className="w-full cursor-pointer rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+          >
+            Continue with {p.label}
+          </button>
+        ))
+      ) : null}
     </div>
   );
 }

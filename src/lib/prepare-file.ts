@@ -32,10 +32,12 @@ export async function prepareFotoModulo(file: File): Promise<PreparedFile> {
   }
 }
 
-export async function prepareFile(file: File): Promise<PreparedFile> {
+export async function prepareFile(file: File, uso: "guarda" | "documento" = "documento"): Promise<PreparedFile> {
   if (file.type.startsWith("image/")) {
     try {
-      const data = await compressImage(file);
+      const largo = uso === "guarda" ? 1600 : 1280;
+      const tetto = uso === "guarda" ? 280_000 : 210_000;
+      const data = await compressImage(file, largo, 0.8, tetto);
       const base = file.name.replace(/\.[^.]+$/, "") || "foto";
       return { name: `${base.slice(0, 70)}.jpg`, type: "image/jpeg", data };
     } catch {
@@ -89,13 +91,13 @@ export async function prepareFotoProfilo(file: File): Promise<string> {
     const sx = Math.round((bitmap.width - side) / 2);
     const sy = Math.round((bitmap.height - side) / 2);
     const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 640;
+    canvas.width = 512;
+    canvas.height = 512;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("foto");
-    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, 640, 640);
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, 512, 512);
     bitmap.close();
-    const data = jpegEntro(canvas, 0.86, 140_000);
+    const data = jpegEntro(canvas, 0.8, 85_000);
     if (!data.startsWith("data:image/jpeg;base64,")) throw new Error("La foto è troppo grande.");
     return data;
   } catch (reason) {
@@ -107,10 +109,20 @@ export async function prepareFotoProfilo(file: File): Promise<string> {
 export async function prepareLogo(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Il logo deve essere un'immagine.");
   try {
-    const data = await compressImage(file, 512, 0.86, 140_000, "#ffffff");
-    if (!data.startsWith("data:image/jpeg;base64,") || data.length > 160_000) {
-      throw new Error("Il logo è troppo grande. Riprova con un'immagine più semplice.");
-    }
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 384 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("foto");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const data = haTrasparenza(canvas) ? pngEntro(canvas, 160_000) : jpegEntro(canvas, 0.85, 120_000);
+    const ammesso = data.startsWith("data:image/jpeg;base64,") || data.startsWith("data:image/png;base64,");
+    if (!ammesso || data.length > 160_000) throw new Error("Il logo è troppo grande. Riprova con un'immagine più semplice.");
     return data;
   } catch (reason) {
     if (reason instanceof Error && reason.message.startsWith("Il logo")) throw reason;
@@ -119,13 +131,51 @@ export async function prepareLogo(file: File): Promise<string> {
 }
 
 function jpegEntro(canvas: HTMLCanvasElement, qualityStart: number, limit: number): string {
-  let quality = qualityStart;
-  let data = canvas.toDataURL("image/jpeg", quality);
-  while (data.length > limit && quality > 0.5) {
-    quality -= 0.08;
-    data = canvas.toDataURL("image/jpeg", quality);
+  let box = canvas;
+  let quality = Math.min(0.92, Math.max(0.7, qualityStart));
+  let data = box.toDataURL("image/jpeg", quality);
+  for (let giro = 0; giro < 8 && data.length > limit; giro += 1) {
+    if (quality > 0.7) quality = Math.max(0.7, Math.round((quality - 0.05) * 100) / 100);
+    else if (Math.max(box.width, box.height) > 480) {
+      box = scala(box, 0.85);
+      quality = Math.min(0.92, Math.max(0.7, qualityStart));
+    } else break;
+    data = box.toDataURL("image/jpeg", quality);
   }
   if (data.length > 1_500_000) throw new Error("grande");
+  return data;
+}
+
+function scala(source: HTMLCanvasElement, factor: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(source.width * factor));
+  canvas.height = Math.max(1, Math.round(source.height * factor));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("foto");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function haTrasparenza(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return false;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const step = Math.max(16, Math.floor(data.length / 4000 / 4) * 4);
+  for (let i = 3; i < data.length; i += step) {
+    if (data[i] < 250) return true;
+  }
+  return false;
+}
+
+function pngEntro(canvas: HTMLCanvasElement, limit: number): string {
+  let box = canvas;
+  let data = box.toDataURL("image/png");
+  for (let giro = 0; giro < 6 && data.length > limit && Math.max(box.width, box.height) > 96; giro += 1) {
+    box = scala(box, 0.8);
+    data = box.toDataURL("image/png");
+  }
   return data;
 }
 

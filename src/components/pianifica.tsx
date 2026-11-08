@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, BookmarkPlus, BookOpen, ChevronDown, FileDown, FlaskConical, Gauge, GitCompare, Lock, Timer, Waves } from "lucide-react";
 import { useFondale } from "@/components/app-frame";
+import { SegnoPro } from "@/components/segno-pro";
 import { ScaricoDocumento } from "@/components/scarico-doc";
 import { messaggioErrore, useT, type Traduci } from "@/lib/i18n";
 import { accettaScaricoPianificatore, statoScaricoPianificatore } from "@/lib/fondale.functions";
@@ -500,7 +501,7 @@ function PianificatoreTecnico({ onCambia, attivo }: { onRefuse: () => void; onCa
     <section className="mt-6">
       <div className="flex items-center gap-3">
         <Gauge className="size-6 shrink-0 text-lagoon" aria-hidden />
-        <h2 className="text-xl">{t("Pianificatore tecnico")}</h2>
+        <h2 className="text-xl">{t("Pianificatore tecnico")}<SegnoPro /></h2>
       </div>
       <div className="mt-4 rounded-card border border-line bg-deep px-4 py-4">
         <p className="flex items-center gap-2 text-sm font-medium">
@@ -1404,7 +1405,7 @@ export function Pianifica({ onRefuse }: { onRefuse: () => void }) {
               className="rounded-2xl border border-lagoon px-4 py-4 text-left disabled:opacity-60"
               onClick={() => scegli("tecnico")}
             >
-              <span className="block text-base font-medium">{t("Pianificatore tecnico")}</span>
+              <span className="block text-base font-medium">{t("Pianificatore tecnico")}{tecnicoChiuso ? null : <SegnoPro />}</span>
               <span className="mt-1 block text-sm text-mist">
                 {tecnicoChiuso ? t("Disponibile con Pro") : t("CCR, bailout, livelli, gas")}
               </span>
@@ -1644,7 +1645,7 @@ function Ricreativo({ onCambia }: { onCambia: () => void }) {
           onClick={() => setRipetitiva((ora) => !ora)}
         >
           <span>
-            <span className="block text-base font-medium">{t("Immersione ripetitiva")}</span>
+            <span className="block text-base font-medium">{t("Immersione ripetitiva")}<SegnoPro /></span>
             <span className="mt-0.5 block text-sm text-mist">{t("Prima immersione, intervallo e NDL della successiva")}</span>
           </span>
         </button>
