@@ -14,7 +14,7 @@ export const Route = createFileRoute("/piano")({
   component: Page,
 });
 
-const vuoti: FatturaDati = { ragione: "", cf: "", piva: "", indirizzo: "", sdi: "", pec: "" };
+const vuoti: FatturaDati = { nome: "", cognome: "", ragione: "", cf: "", piva: "", indirizzo: "", sdi: "", pec: "" };
 
 function Page() {
   return (
@@ -79,11 +79,13 @@ function Piano() {
       {search.esito === "annullato" ? <p className="mt-3 text-sm text-brass">{t("Pagamento annullato.")}</p> : null}
       {ok ? <p className="mt-3 text-sm text-foam">{ok}</p> : null}
       <div className="mt-4 flex gap-2">
-        <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${fattura ? "border border-line" : "bg-lagoon font-medium text-ink"}`} onClick={() => setFattura(false)}>{t("Senza fattura")}</button>
-        <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${fattura ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setFattura(true)}>{t("Con fattura")}</button>
+        <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${!fattura && metodo !== "bonifico" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => { if (metodo !== "bonifico") setFattura(false); }}>{t("Senza fattura")}</button>
+        <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${fattura || metodo === "bonifico" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setFattura(true)}>{t("Con fattura")}</button>
       </div>
-      {fattura ? (
+      {fattura || metodo === "bonifico" ? (
         <div className="mt-3 grid gap-3">
+          {campo("nome", "Nome")}
+          {campo("cognome", "Cognome")}
           {campo("ragione", "Ragione sociale o nome")}
           {campo("cf", "Codice fiscale")}
           {campo("piva", "Partita IVA")}
@@ -95,7 +97,7 @@ function Piano() {
       {tipo === "sub" ? null : (
         <div className="mt-4 flex gap-2">
           <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${metodo === "stripe" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setMetodo("stripe")}>Stripe</button>
-          <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${metodo === "bonifico" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setMetodo("bonifico")}>{t("Bonifico")}</button>
+          <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${metodo === "bonifico" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => { setMetodo("bonifico"); setFattura(true); }}>{t("Bonifico")}</button>
         </div>
       )}
       {tipo !== "sub" && metodo === "bonifico" ? (
@@ -114,8 +116,14 @@ function Piano() {
         onClick={() => {
           setBusy(true);
           setErrore(null);
+          const conFattura = fattura || (tipo !== "sub" && metodo === "bonifico");
+          if (conFattura && (!dati.nome.trim() || !dati.cognome.trim() || !dati.ragione.trim() || !dati.cf.trim() || !dati.piva.trim() || !dati.indirizzo.trim())) {
+            setErrore(t("Per la fattura servono nome, cognome, ragione sociale, codice fiscale, partita IVA e indirizzo."));
+            setBusy(false);
+            return;
+          }
           void avviaPagamento({
-            data: { tipo, metodo: tipo === "sub" ? "stripe" : metodo, fattura, dati, origine: window.location.origin },
+            data: { tipo, metodo: tipo === "sub" ? "stripe" : metodo, fattura: conFattura, dati, origine: window.location.origin },
           })
             .then(async (esito) => {
               if (esito.url) {

@@ -12,6 +12,8 @@ import {
 } from "@/lib/prezzi";
 
 export type FatturaDati = {
+  nome: string;
+  cognome: string;
   ragione: string;
   cf: string;
   piva: string;
@@ -55,6 +57,8 @@ function testo(value: unknown, max: number): string {
 function datiFattura(value: unknown): FatturaDati {
   const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   return {
+    nome: testo(raw.nome, 80),
+    cognome: testo(raw.cognome, 80),
     ragione: testo(raw.ragione, 120),
     cf: testo(raw.cf, 16).toUpperCase(),
     piva: testo(raw.piva, 16),
@@ -120,11 +124,14 @@ export const avviaPagamento = createServerFn({ method: "POST" })
     if (tipo === "sub" && metodo !== "stripe") throw new Error("Il Pro del subacqueo si paga solo con carta, una volta l'anno.");
     const origine = testo(raw.origine, 200);
     if (!/^https?:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(origine)) throw new Error("Indirizzo non valido.");
-    return { tipo: tipo as Tipo, metodo: metodo as "stripe" | "bonifico", fattura: raw.fattura === true, dati: datiFattura(raw.dati), origine };
+    const fattura = metodo === "bonifico" || raw.fattura === true;
+    return { tipo: tipo as Tipo, metodo: metodo as "stripe" | "bonifico", fattura, dati: datiFattura(raw.dati), origine };
   })
   .handler(async ({ context, data }): Promise<{ url?: string; iban?: string; intestatario?: string; ok?: boolean }> => {
     const sql = await getSql();
-    if (data.fattura && (!data.dati.ragione || !data.dati.cf)) throw new Error("Per la fattura servono ragione sociale e codice fiscale.");
+    if (data.fattura && (!data.dati.nome || !data.dati.cognome || !data.dati.ragione || !data.dati.cf || !data.dati.piva || !data.dati.indirizzo)) {
+      throw new Error("Per la fattura servono nome, cognome, ragione sociale, codice fiscale, partita IVA e indirizzo.");
+    }
     if (data.metodo === "stripe" && !process.env.STRIPE_SECRET_KEY) throw new Error("Stripe non è ancora collegato.");
     await sql`
       insert into fatture_anagrafica (user_id, dati) values (${context.userId}, ${JSON.stringify(data.dati)}::jsonb)
@@ -304,15 +311,23 @@ export const impostaPostiStaff = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
     const clubId = Number(raw.clubId);
-    const limite = Number(raw.limite);
+    const totale = Number(raw.totale);
     if (!Number.isInteger(clubId) || clubId <= 0) throw new Error("Struttura non valida.");
-    if (!Number.isInteger(limite) || limite < 0 || limite > 500) throw new Error("Limite non valido.");
-    return { clubId, limite };
+    if (!Number.isInteger(totale) || totale < 0 || totale > 500) throw new Error("Limite non valido.");
+    return { clubId, totale };
   })
   .handler(async ({ context, data }): Promise<{ ok: true }> => {
     const sql = await getSql();
     const ruolo = await sql<{ role: string }>`select role from profiles where user_id = ${context.userId}`;
     if (ruolo[0]?.role !== "piattaforma") throw new Error("Solo il gestore modifica i posti.");
-    await sql`update club set posti_limite = ${data.limite} where id = ${data.clubId}`;
+    const righe = await sql<{ posti_extra: number | null }>`select posti_extra from club where id = ${data.clubId}`;
+    if (!righe[0]) throw new Error("Struttura non trovata.");
+    const extra = Number(righe[0].posti_extra ?? 0);
+    if (data.totale === 0) {
+      await sql`update club set posti_limite = null where id = ${data.clubId}`;
+      return { ok: true };
+    }
+    if (data.totale <= extra) throw new Error("Il totale non può essere inferiore ai posti extra già pagati.");
+    await sql`update club set posti_limite = ${data.totale - extra} where id = ${data.clubId}`;
     return { ok: true };
   });

@@ -10,7 +10,7 @@ import { ClubLogo } from "@/components/club-logo";
 import { Copyright } from "@/components/copyright";
 import { MascheraPro } from "@/components/maschera-pro";
 import { entroUnMese } from "@/lib/prezzi";
-import { createProfile, getSessionContext, listScadenze, accettaInformativa, accettaAccordo, accettaResponsabilita, type SessionContext } from "@/lib/fondale.functions";
+import { createProfile, getSessionContext, listScadenze, accettaInformativa, accettaAccordo, accettaResponsabilita, segnaPresenza, type SessionContext } from "@/lib/fondale.functions";
 import { TESTO_RESPONSABILITA } from "@/lib/responsabilita";
 import { TestoInformativa } from "@/components/informativa";
 import { LegaliGate } from "@/components/legali-gate";
@@ -270,8 +270,13 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session?.profile) return;
+    const beat = () => {
+      void segnaPresenza().catch(() => undefined);
+    };
+    beat();
     const timer = window.setInterval(() => {
       void refresh().catch(() => undefined);
+      beat();
     }, 25000);
     return () => window.clearInterval(timer);
   }, [session?.profile?.userId]);

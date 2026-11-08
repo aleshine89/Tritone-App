@@ -860,6 +860,28 @@ async function requirePlatform(sql: Sql, userId: string): Promise<void> {
   if (!profile || profile.role !== "piattaforma") throw new Error("Solo il gestore della piattaforma può farlo.");
 }
 
+export const segnaPresenza = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<{ ok: true }> => {
+    const sql = await getSql();
+    await sql`
+      insert into presenze (user_id, visto) values (${context.userId}, now())
+      on conflict (user_id) do update set visto = now()
+    `;
+    return { ok: true };
+  });
+
+export const contaCollegati = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<number> => {
+    const sql = await getSql();
+    await requirePlatform(sql, context.userId);
+    const rows = await sql<{ n: number }>`
+      select count(*)::int as n from presenze where visto > now() - interval '90 seconds'
+    `;
+    return Number(rows[0]?.n ?? 0);
+  });
+
 function readJoin(input: unknown): JoinInput {
   if (!input || typeof input !== "object") throw new Error("Dati mancanti.");
   const raw = input as Record<string, unknown>;
@@ -4386,6 +4408,9 @@ export type ScuolaAffiliata = {
   creato: string;
   hasLogo: boolean;
   senzaTitolare: boolean;
+  mezzoNautico: boolean;
+  postiExtra: number;
+  postiLimite: number | null;
 };
 
 export type DivingScelta = {
@@ -5742,11 +5767,15 @@ export const listScuole = createServerFn({ method: "POST" })
       creato: string;
       has_logo: boolean | string | null;
       senza_titolare: boolean | string | null;
+      mezzo_nautico: boolean | string | null;
+      posti_extra: number | null;
+      posti_limite: number | null;
     }>`
       select c.id, c.nome, c.sede, c.email, c.telefono, c.stato,
              to_char(c.creato_il, 'YYYY-MM-DD') as creato,
              (c.logo_data is not null and c.logo_data <> '') as has_logo,
              (c.owner_user_id is null and c.co_owner_user_id is null) as senza_titolare,
+             c.mezzo_nautico, c.posti_extra, c.posti_limite,
              (select count(distinct s.user_id)::int from submissions s join profiles p on p.user_id = s.user_id where s.club_id = c.id and s.status = 'inviato' and p.role = 'subacqueo') as allievi,
              (select count(*)::int from submissions s where s.club_id = c.id and s.status = 'inviato') as schede,
              (select count(*)::int from staff_membri m where m.club_id = c.id and m.user_id is distinct from c.owner_user_id and m.user_id is distinct from c.co_owner_user_id) as staff
@@ -5766,6 +5795,9 @@ export const listScuole = createServerFn({ method: "POST" })
       creato: row.creato,
       hasLogo: asBool(row.has_logo),
       senzaTitolare: asBool(row.senza_titolare),
+      mezzoNautico: row.mezzo_nautico == null ? true : asBool(row.mezzo_nautico),
+      postiExtra: Number(row.posti_extra ?? 0),
+      postiLimite: row.posti_limite == null ? null : Number(row.posti_limite),
     }));
   });
 

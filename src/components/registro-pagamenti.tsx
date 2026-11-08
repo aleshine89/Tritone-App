@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { impostaPostiStaff, incassaPagamento, registroPagamenti, type PagamentoRiga } from "@/lib/pagamenti.functions";
+import { incassaPagamento, registroPagamenti, type PagamentoRiga } from "@/lib/pagamenti.functions";
 import { euro } from "@/lib/prezzi";
 import { messaggioErrore, useT } from "@/lib/i18n";
 import { formatDay } from "@/lib/format";
@@ -11,8 +11,6 @@ export function RegistroPagamenti() {
   const [righe, setRighe] = useState<PagamentoRiga[] | null>(null);
   const [scelto, setScelto] = useState<PagamentoRiga | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
-  const [clubId, setClubId] = useState("");
-  const [limite, setLimite] = useState("");
 
   function carica(next = filtro) {
     setErrore(null);
@@ -74,25 +72,10 @@ export function RegistroPagamenti() {
         <div className="mt-3 text-sm">
           <p className="font-medium">{scelto.nome}</p>
           {scelto.fattura ? (
-            <p className="mt-1 text-mist">{[scelto.dati.ragione, scelto.dati.cf, scelto.dati.piva, scelto.dati.indirizzo, scelto.dati.sdi, scelto.dati.pec].filter(Boolean).join(" · ") || t("Nessun dato fattura.")}</p>
+            <p className="mt-1 text-mist">{[scelto.dati.nome, scelto.dati.cognome, scelto.dati.ragione, scelto.dati.cf, scelto.dati.piva, scelto.dati.indirizzo, scelto.dati.sdi, scelto.dati.pec].filter(Boolean).join(" · ") || t("Nessun dato fattura.")}</p>
           ) : <p className="mt-1 text-mist">{t("Senza fattura")}</p>}
         </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <input value={clubId} onChange={(event) => setClubId(event.target.value)} placeholder={t("Id struttura")} className="min-h-11 w-28 rounded-xl border border-line bg-abyss px-3" />
-        <input value={limite} onChange={(event) => setLimite(event.target.value)} placeholder={t("Posti inclusi")} className="min-h-11 w-28 rounded-xl border border-line bg-abyss px-3" />
-        <button
-          type="button"
-          className="min-h-11 rounded-full border border-line px-4 text-sm"
-          onClick={() => {
-            void impostaPostiStaff({ data: { clubId: Number(clubId), limite: Number(limite) } })
-              .then(() => setErrore(null))
-              .catch((reason: unknown) => setErrore(messaggioErrore(reason, "Limite non salvato.")));
-          }}
-        >
-          {t("Salva limite staff")}
-        </button>
-      </div>
     </section>
   );
 }

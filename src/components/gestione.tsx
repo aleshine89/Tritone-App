@@ -3,11 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { useFondale } from "@/components/app-frame";
 import { AccountGestore } from "@/components/account-gestore";
 import { ClubLogo } from "@/components/club-logo";
-import { inviaCodiceAffiliazione, listAffiliazioni, listChiusure, listRichiesteMezzo, listScuole, openOwnDiving, scaricaCopiaGestore, scaricaDatabaseGestore, caricaDatabaseGestore, setScuolaStato, eliminaScuola, tieniScuola, confermaMezzoNautico, elencoAbbonamenti, confrontaModuliUtente, ripristinaModuliUtente, type Affiliazione, type ChiusuraScuola, type RichiestaMezzo, type ScuolaAffiliata, type AccountGestore as AccountRiga, type ModuloMancante } from "@/lib/fondale.functions";
+import { inviaCodiceAffiliazione, listAffiliazioni, listChiusure, listRichiesteMezzo, listScuole, openOwnDiving, scaricaCopiaGestore, scaricaDatabaseGestore, caricaDatabaseGestore, setScuolaStato, eliminaScuola, tieniScuola, confermaMezzoNautico, elencoAbbonamenti, confrontaModuliUtente, ripristinaModuliUtente, contaCollegati, type Affiliazione, type ChiusuraScuola, type RichiestaMezzo, type ScuolaAffiliata, type AccountGestore as AccountRiga, type ModuloMancante } from "@/lib/fondale.functions";
 import { formByKey } from "@/lib/forms";
 import { formatDay } from "@/lib/format";
 import { messaggioErrore, useT, type Traduci } from "@/lib/i18n";
 import { RegistroPagamenti } from "@/components/registro-pagamenti";
+import { impostaPostiStaff } from "@/lib/pagamenti.functions";
+import { tettoStaff } from "@/lib/prezzi";
 import type { NotaAnagrafica } from "@/lib/anagrafica";
 
 export function Gestione() {
@@ -68,6 +70,7 @@ export function Gestione() {
     <div className="mx-auto max-w-3xl">
       <p className="text-xs text-mist">{t("Gestore")}</p>
       <h1 className="mt-2 text-3xl leading-none">{t("Scuole affiliate")}</h1>
+      <CollegatiOra />
       <p className="mt-2 text-sm text-mist">
         {rows ? t("{attive} attive su {totale}", { attive, totale: rows.length }) : t("Carico le scuole…")}. {t("Vedi le scuole, non i loro moduli. Ogni diving ha un titolare.")}
       </p>
@@ -444,11 +447,10 @@ export function Gestione() {
             <p className="mt-3 text-sm text-mist">
               {row.allievi === 1 ? t("{n} subacqueo", { n: row.allievi }) : t("{n} subacquei", { n: row.allievi })}
               {" · "}
-              {t("{n} staff", { n: row.staff })}
-              {" · "}
               {t("{n} schede inviate", { n: row.schede })}
               {row.creato ? ` · ${t("dal {data}", { data: formatDay(row.creato) })}` : ""}
             </p>
+            <PostiStaff row={row} onSalvato={load} />
             <div className="mt-3 flex flex-wrap gap-2">
               {row.id === mine ? (
                 <button
@@ -509,6 +511,76 @@ export function Gestione() {
       ) : null}
       </>
       ) : null}
+    </div>
+  );
+}
+
+function CollegatiOra() {
+  const t = useT();
+  const [n, setN] = useState<number | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const leggi = () => {
+      void contaCollegati()
+        .then((value) => {
+          if (live) setN(value);
+        })
+        .catch(() => undefined);
+    };
+    leggi();
+    const timer = window.setInterval(leggi, 15000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return <p className="mt-3 text-sm">{t("Collegati ora: {n}", { n: n ?? "…" })}</p>;
+}
+
+function PostiStaff({ row, onSalvato }: { row: ScuolaAffiliata; onSalvato: () => Promise<void> }) {
+  const t = useT();
+  const tetto = tettoStaff(row.mezzoNautico, row.postiLimite, row.postiExtra);
+  const [valore, setValore] = useState(String(tetto));
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  useEffect(() => {
+    setValore(String(tetto));
+  }, [tetto]);
+
+  return (
+    <div className="mt-3">
+      <p className="text-sm">{t("Staff {n} di {totale}", { n: row.staff, totale: tetto })}</p>
+      {row.postiExtra > 0 ? <p className="mt-1 text-xs text-brass">{t("di cui {n} posti extra", { n: row.postiExtra })}</p> : null}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-mist">
+          {t("Posti totali")}
+          <input
+            inputMode="numeric"
+            value={valore}
+            onChange={(event) => setValore(event.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+            className="ml-2 min-h-11 w-20 rounded-xl border border-line bg-abyss px-3 text-foam"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          className="min-h-11 rounded-full border border-line px-4 text-sm disabled:opacity-60"
+          onClick={() => {
+            setBusy(true);
+            setErrore(null);
+            void impostaPostiStaff({ data: { clubId: row.id, totale: Number(valore || 0) } })
+              .then(() => onSalvato())
+              .catch((reason: unknown) => setErrore(messaggioErrore(reason, "Limite non salvato.")))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? t("Salvo…") : t("Salva")}
+        </button>
+      </div>
+      {errore ? <p className="mt-1 text-sm text-danger">{errore}</p> : null}
     </div>
   );
 }
