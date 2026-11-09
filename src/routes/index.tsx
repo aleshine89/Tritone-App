@@ -128,12 +128,27 @@ function HomeBody() {
       </div>
 
       <div className="mt-4 flex items-center gap-4">
-        <svg viewBox="0 0 36 36" className="size-16 shrink-0 -rotate-90 text-line" aria-hidden>
-          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" />
-          <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" className="text-lagoon" strokeWidth="3" strokeLinecap="round" pathLength="100" strokeDasharray={`${anno ? Math.min(100, Math.round((anno.immersioni / 20) * 100)) : 0} 100`} />
-        </svg>
+        <div className="relative size-20 shrink-0">
+          <svg viewBox="0 0 36 36" className="size-20 -rotate-90" aria-hidden>
+            <circle cx="18" cy="18" r="13.5" fill="none" className="text-lagoon" stroke="currentColor" strokeWidth="4.5" />
+            <circle
+              cx="18"
+              cy="18"
+              r="13.5"
+              fill="none"
+              className="text-foam"
+              stroke="currentColor"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              pathLength="100"
+              strokeDasharray={`${anno ? Math.min(100, Math.round((anno.immersioni / 20) * 100)) : 0} 100`}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-xl font-medium leading-none text-foam">{anno?.immersioni ?? 0}</span>
+        </div>
         <div className="min-w-0">
-          <p className="text-lg">{t("{n} di {totale}", { n: anno?.immersioni ?? 0, totale: 20 })}</p>
+          <p className="text-2xl leading-none text-foam">{t("{n} di {totale}", { n: anno?.immersioni ?? 0, totale: 20 })}</p>
+          <p className="mt-1 text-sm text-mist">{t("immersioni")}</p>
           <p className="mt-1 text-xs text-mist">{t("Traguardo consigliato: 20 immersioni l'anno. Non è un obbligo.")}</p>
           {anno?.massima ? <p className="mt-1 text-xs text-brass">{t("massima {m} m", { m: anno.massima })}</p> : null}
         </div>
@@ -144,13 +159,13 @@ function HomeBody() {
       {azione ? <AzioneGrande azione={azione} /> : null}
 
       <div className="mt-5 grid gap-3">
-        <Link to="/logbook" search={{ nuova: 1, condivisione: undefined }} className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white">
+        <Link to="/logbook" search={{ nuova: 1, condivisione: undefined }} className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
           {t("Nuova immersione (Logbook)")}
         </Link>
-        <Link to="/moduli" className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white">
+        <Link to="/moduli" className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
           {t("Invia un modulo")}
         </Link>
-        <Link to="/cerca-diving" className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white">
+        <Link to="/cerca-diving" className="flex min-h-12 items-center justify-center rounded-2xl bg-tide text-sm font-medium text-white transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
           {t("Cerca Diving")}
         </Link>
       </div>
@@ -168,7 +183,7 @@ function HomeBody() {
             { voce: "emergenze", nome: "Emergenze", riga: "Numeri da chiamare", icona: Phone },
           ] as const
         ).map((voce) => (
-          <Link key={voce.voce} to="/personale" search={{ voce: voce.voce }} className="flex items-center gap-3 rounded-2xl border border-line bg-deep px-3 py-3">
+          <Link key={voce.voce} to="/personale" search={{ voce: voce.voce }} className={`flex items-center gap-3 rounded-2xl bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84] ${voce.voce === "emergenze" ? "border-2 border-brass" : "border border-line"}`}>
             <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
             <span className="min-w-0">
               <span className="block text-sm font-medium leading-tight">

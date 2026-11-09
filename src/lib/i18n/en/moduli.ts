@@ -1,5 +1,5 @@
 export const EN_MODULI: Record<string, string> = {
-  "Modelli operativi per un'ASD subacquea, allineati alla Legge 7 maggio 2026, n. 70, alla ISO 24803:2017 e alla prassi documentale diffusa da ASSOSUB con DAN Europe. Sono esempi di lavoro: non riproducono testualmente modulistica di terzi, non sostituiscono certificato medico o polizza, e i registri di immersione vanno conservati almeno sei mesi.": "Working templates for a scuba club, aligned with Law no. 70 of 7 May 2026, ISO 24803:2017 and the paperwork practice shared by ASSOSUB with DAN Europe. They are working examples: they do not copy third-party forms word for word, they do not replace a medical certificate or an insurance policy, and dive logs must be kept for at least six months.",
+  "Modelli operativi allineati alla normativa vigente e alla prassi documentale del settore. Sono esempi di lavoro: non sostituiscono certificato medico o polizza e i registri di immersione vanno conservati secondo quanto previsto dalla legge.": "Working templates aligned with the rules in force and with usual sector paperwork. They are working examples: they do not replace a medical certificate or an insurance policy, and dive logs must be kept as the law requires.",
   "Subacqueo": "Diver",
   "Staff della scuola": "School staff",
   "Scuola": "School",

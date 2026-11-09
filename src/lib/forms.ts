@@ -56,7 +56,7 @@ export type FormDef = {
 };
 
 export const DISCLAIMER =
-  "Modelli operativi per un'ASD subacquea, allineati alla Legge 7 maggio 2026, n. 70, alla ISO 24803:2017 e alla prassi documentale diffusa da ASSOSUB con DAN Europe. Sono esempi di lavoro: non riproducono testualmente modulistica di terzi, non sostituiscono certificato medico o polizza, e i registri di immersione vanno conservati almeno sei mesi.";
+  "Modelli operativi allineati alla normativa vigente e alla prassi documentale del settore. Sono esempi di lavoro: non sostituiscono certificato medico o polizza e i registri di immersione vanno conservati secondo quanto previsto dalla legge.";
 
 export const ROLE_LABEL: Record<Role, string> = {
   subacqueo: "Subacqueo",
