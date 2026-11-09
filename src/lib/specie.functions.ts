@@ -488,6 +488,10 @@ async function chiedi(
     : "";
   const text =
     "Identifica l'organismo marino nella foto. Nome dell'animale, non della parte. Fino a 3 binomi reali, il più probabile prima. Non inventare. " +
+    "Mare predefinito: Adriatico centrale, compreso il Conero, salvo che le note indichino un altro mare. Preferisci specie mediterranee di quel tratto. Non usare un nome indo-pacifico se i segni combaciano con una specie del Mediterraneo. " +
+    "Carapace piccolo, tondo e chiaro, con disegno scuro a teschio: Ilia nucleus, il granchio testa di morto. Non è Calappa granulata. " +
+    "Corpo piatto ovale, papille sul dorso, due tentacoli davanti, senza cerata e senza corona branchiale: Thysanozoon brocchii, un verme piatto. Non è un nudibranco e, in Mediterraneo, non è Thysanozoon nigropapillosum. " +
+    "Per i nudibranchi del Conero e dell'Adriatico usa il binomio mediterraneo. Se rinofori e ciuffo branchiale non si vedono bene, confidence bassa: non scegliere il nudibranco più fotografato. " +
     "Mantello bianco vellutato, trattini o punti neri, rinofori e ciuffo branchiale neri o bruno-neri, senza cerata: prima Jorunna parva, poi Jorunna tomentosa. Non è Felimare né uno spirografo. " +
     "Solo se i segni coincidono: lamelle chiare con linea gialla e senza tubo = Felimare picta. Filamenti che escono da un tubo = Sabella spallanzanii. Cerata scure ramificate e cresta fra i rinofori = Antiopella cristata. Tentacoli orali lunghissimi e lisci = Caloria quatrefagesi, non Cratena peregrina." +
     contesto +
@@ -501,7 +505,7 @@ async function chiedi(
 
 async function chiediAlternative(apiKey: string, image: string): Promise<Candidato[]> {
   const text =
-    "Seconda lettura, indipendente dalla prima. Descrivi i segni che vedi e elenca fino a 4 specie marine possibili, compresi i sosia meno comuni. Non scegliere il nome più famoso se i segni non coincidono. Rispondi solo JSON: {\"candidati\":[{\"scientificName\":\"Genus species\",\"confidence\":\"bassa\",\"segno\":\"max 80 caratteri\"}]} senza duplicati.";
+    "Seconda lettura, indipendente dalla prima. Mare predefinito: Adriatico e Conero, salvo che la foto sia chiaramente tropicale. Descrivi i segni che vedi e elenca fino a 4 specie marine possibili, compresi i sosia mediterranei meno comuni. Se il carapace ha un disegno a teschio, includi Ilia nucleus. Se è un verme piatto con papille e due tentacoli davanti, includi Thysanozoon brocchii e non un nudibranco. Non scegliere il nome più famoso se i segni non coincidono. Rispondi solo JSON: {\"candidati\":[{\"scientificName\":\"Genus species\",\"confidence\":\"bassa\",\"segno\":\"max 80 caratteri\"}]} senza duplicati.";
   const raw = (await leggiVisione(apiKey, [image], text, 12000)) ?? "";
   if (!raw.trim()) return [];
   return candidatiDa(raw).map((item) => ({ ...item, alta: false }));
@@ -688,7 +692,7 @@ async function leggiVisione(apiKey: string, immagini: string[], text: string, at
       return null;
     }
     const contents = [{ parts: parts.map((part) => (part.text ? { text: part.text } : { inline_data: part.inline_data })) }];
-    const models = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"];
+    const models = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
     let ultimo = "";
     for (const model of models) {
       const esito = await unaLettura(apiKey, model, contents, attesa);
@@ -874,7 +878,23 @@ function candidatiDa(raw: string): Candidato[] {
     }
   }
   affiancaSosia(out);
+  privilegiaAdriatico(out, mare);
   return out.slice(0, 4);
+}
+
+function privilegiaAdriatico(out: Candidato[], mare: string) {
+  if (mare === "tropicale") return;
+  const segno = out.map((item) => `${item.nome} ${item.segno}`).join(" ").toLowerCase();
+  const ha = (nome: string) => out.some((item) => item.nome.toLowerCase().includes(nome));
+  if (/teschio|testa di morto|ilia nucleus|zosimus aeneus/.test(segno) && !ha("ilia nucleus")) {
+    out.unshift({ nome: "Ilia nucleus", alta: /teschio|testa di morto/.test(segno), segno: "Carapace tondo chiaro con disegno scuro a teschio" });
+  }
+  if ((/thysanozoon|pseudoceros|verme piatto|platelm/.test(segno) || ha("thysanozoon")) && !ha("thysanozoon brocchii")) {
+    out.unshift({ nome: "Thysanozoon brocchii", alta: false, segno: "Verme piatto ovale, papille sul dorso, due tentacoli davanti" });
+  }
+  for (const item of out) {
+    if (/thysanozoon nigropapillosum|pseudoceros/i.test(item.nome)) item.alta = false;
+  }
 }
 
 function affiancaSosia(out: Candidato[]) {
@@ -1071,6 +1091,14 @@ const SCHEDE: Record<string, { nome: string; testo: string }> = {
   "felimare tricolor": {
     nome: "Doride tricolore",
     testo: "Nudibranco mediterraneo blu, con tre linee longitudinali sul dorso: gialla, bianca e gialla. I rinofori sono blu-viola. Il sosia è Felimare villafranca, con bordo e linea mediana più arancio.",
+  },
+  "ilia nucleus": {
+    nome: "Granchio testa di morto",
+    testo: "Granchio dell'Adriatico e del Mediterraneo. Il carapace è piccolo, tondo e chiaro, con un disegno scuro che ricorda un teschio. Non è Calappa granulata, che è più grande e ha il carapace a scatola.",
+  },
+  "thysanozoon brocchii": {
+    nome: "Thysanozoon brocchii",
+    testo: "Verme piatto dell'Adriatico e del Mediterraneo, non un nudibranco. Corpo ovale e piatto, con papille sul dorso e due tentacoli davanti. Non ha cerata né una corona branchiale. In Mediterraneo non va chiamato Thysanozoon nigropapillosum, che è il sosia dell'Indo-Pacifico.",
   },
 };
 
