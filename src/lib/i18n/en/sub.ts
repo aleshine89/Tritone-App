@@ -1,4 +1,12 @@
 export const EN_SUB: Record<string, string> = {
+  "Invita un amico": "Invite a friend",
+  "Come installarla": "How to install it",
+  "Ti invito su Tritone.": "I'm inviting you to Tritone.",
+  "L'amico inquadra il codice con la fotocamera e apre tritoneapp.it.": "Your friend points the camera at the code and opens tritoneapp.it.",
+  "QR code di Tritone": "Tritone QR code",
+  "Preparo il codice…": "Preparing the code…",
+  "Condividi": "Share",
+  "Condivisione non riuscita.": "Couldn't share.",
   "Schede inviate": "Submitted forms",
   "Le schede e gli attrezzi sono della scuola.": "The forms and the gear belong to the school.",
   "Schede dei subacquei e attrezzi della scuola.": "Diver forms and the school's gear.",

@@ -18,6 +18,7 @@ import { attivaNotificheTelefono, ascoltaNotificheTelefono, disattivaNotificheTe
 import { prepareLogo } from "@/lib/prepare-file";
 import { LinguaAccount } from "@/components/lingua-account";
 import { messaggioErrore, useT } from "@/lib/i18n";
+import { toDataURL } from "qrcode";
 import { FINE_PROVA } from "@/lib/abbonamento";
 import { SCARICO_DATA, SCARICO_TITOLO, SCARICO_VERSIONE } from "@/lib/scarico-pianificatore";
 
@@ -203,6 +204,10 @@ function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mt-2 text-3xl leading-none">{t("Profilo")}</h1>
+      <details className="porta" open>
+        <summary>{t("Invita un amico")}</summary>
+        <InvitaAmico />
+      </details>
       {frame.abbonamento.ruolo === "sub" ? (
         <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: undefined }} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brass px-4 text-sm font-medium text-ink">
           {frame.profile?.pianoAbb === "pro" ? t("Rinnova Pro") : t("Attiva Pro")}
@@ -404,6 +409,64 @@ function ProfilePage() {
       <a href="mailto:Tritone.app@gmail.com?subject=Segnalazione%20Tritone" className="mt-6 block text-sm text-lagoon">
         {t("Segnala un miglioramento o un bug")}
       </a>
+    </div>
+  );
+}
+
+function InvitaAmico() {
+  const t = useT();
+  const link = "https://tritoneapp.it";
+  const [src, setSrc] = useState("");
+  const [nota, setNota] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void toDataURL(link, { margin: 1, width: 320, errorCorrectionLevel: "M", color: { dark: "#07141a", light: "#ffffff" } })
+      .then((url) => {
+        if (live) setSrc(url);
+      })
+      .catch(() => {
+        if (live) setSrc("");
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function condividi() {
+    const testo = `${t("Ti invito su Tritone.")} ${link}`;
+    setNota(null);
+    try {
+      if (src && typeof navigator.share === "function") {
+        const blob = await (await fetch(src)).blob();
+        const file = new File([blob], "tritone.png", { type: "image/png" });
+        const conFile = typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
+        if (conFile) {
+          await navigator.share({ files: [file], title: "Tritone", text: testo });
+          return;
+        }
+        await navigator.share({ title: "Tritone", text: testo, url: link });
+        return;
+      }
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setNota(t("Condivisione non riuscita."));
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(testo)}`, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="text-sm text-mist">{t("L'amico inquadra il codice con la fotocamera e apre tritoneapp.it.")}</p>
+      {src ? <img src={src} alt={t("QR code di Tritone")} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-3" /> : <p className="mt-4 text-sm text-mist">{t("Preparo il codice…")}</p>}
+      <button type="button" className="mt-4 min-h-12 w-full rounded-full bg-lagoon px-4 text-sm font-medium text-ink" onClick={() => void condividi()}>
+        {t("Condividi")}
+      </button>
+      {nota ? <p className="mt-2 text-sm text-brass">{nota}</p> : null}
+      <h3 className="mt-6 text-lg">{t("Come installarla")}</h3>
+      <p className="mt-2 text-sm">{t("iPhone: apri il link pubblicato in Safari, tocca Condividi, poi Aggiungi a Home. Si apre a tutto schermo.")}</p>
+      <p className="mt-2 text-sm">{t("Android: apri lo stesso link in Chrome, menu, Installa app. Non usare «Aggiungi a schermata Home».")}</p>
     </div>
   );
 }
