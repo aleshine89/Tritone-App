@@ -24,10 +24,10 @@ export const Route = createRootRoute({
       { name: "apple-mobile-web-app-title", content: "Tritone" },
     ],
     links: [
-      { rel: "icon", type: "image/png", href: "/brand/mark-192.png?v=11" },
+      { rel: "icon", type: "image/png", href: "/brand/mark-192.png?v=13" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/brand/mark-192.png?v=11" },
+      { rel: "apple-touch-icon", href: "/brand/mark-192.png?v=13" },
     ],
   }),
   component: () => (
