@@ -479,3 +479,175 @@ export function scriviPdfReport(input: {
   chiudiPagina();
   return assembla(pages.filter((page) => page.trim()), true);
 }
+
+export type PezzoModulo =
+  | { k: "sezione"; t: string }
+  | { k: "nota"; t: string }
+  | { k: "campo"; t: string }
+  | { k: "coppia"; a: string; b: string }
+  | { k: "scelta"; t: string; opzioni: string[] }
+  | { k: "sino"; t: string }
+  | { k: "spunta"; t: string }
+  | { k: "firma"; t: string };
+
+export function scriviPdfModulo(input: { kicker: string; titolo: string; piede: string; pezzi: PezzoModulo[] }): Uint8Array {
+  const pages: string[] = [];
+  let ops: string[] = [];
+  let y = 800;
+  let pagina = 1;
+
+  function testo(x: number, size: number, font: "F1" | "F2", value: string) {
+    ops.push("BT", `/${font} ${size} Tf`, `1 0 0 1 ${x} ${y} Tm`, `(${pdfTesto(value)}) Tj`, "ET");
+  }
+
+  function linea(x1: number, x2: number, yy: number) {
+    ops.push("0.4 w", `${x1} ${yy} m ${x2} ${yy} l S`);
+  }
+
+  function casella(x: number, yy: number) {
+    ops.push("0.6 w", `${x} ${yy} 8 8 re S`);
+  }
+
+  function chiudi() {
+    const salvo = y;
+    y = 36;
+    testo(520, 8, "F1", String(pagina));
+    y = salvo;
+    pages.push(ops.join("\n"));
+    ops = [];
+  }
+
+  function intestazione() {
+    y = 800;
+    testo(40, 8, "F1", `${input.kicker} | ${input.titolo} (continua)`);
+    y -= 11;
+    linea(40, 555, y);
+    y -= 16;
+  }
+
+  function serve(altezza: number) {
+    if (y - altezza >= 52) return;
+    chiudi();
+    pagina += 1;
+    intestazione();
+  }
+
+  testo(40, 8, "F1", input.kicker);
+  y -= 18;
+  for (const riga of spezza(input.titolo, 42)) {
+    testo(40, 16, "F2", riga);
+    y -= 20;
+  }
+  y -= 2;
+  linea(40, 555, y);
+  y -= 16;
+
+  for (const pezzo of input.pezzi) {
+    if (pezzo.k === "sezione") {
+      serve(26);
+      y -= 6;
+      testo(40, 12, "F2", pezzo.t);
+      y -= 6;
+      linea(40, 555, y);
+      y -= 14;
+      continue;
+    }
+    if (pezzo.k === "nota") {
+      const righe = spezza(pezzo.t, 92);
+      serve(righe.length * 12 + 6);
+      for (const riga of righe) {
+        testo(40, 9, "F1", riga);
+        y -= 12;
+      }
+      y -= 6;
+      continue;
+    }
+    if (pezzo.k === "campo") {
+      serve(28);
+      testo(40, 8, "F1", pezzo.t);
+      y -= 14;
+      linea(40, 555, y);
+      y -= 12;
+      continue;
+    }
+    if (pezzo.k === "coppia") {
+      serve(28);
+      testo(40, 8, "F1", pezzo.a);
+      testo(310, 8, "F1", pezzo.b);
+      y -= 14;
+      linea(40, 280, y);
+      linea(310, 555, y);
+      y -= 12;
+      continue;
+    }
+    if (pezzo.k === "scelta") {
+      const voci = pezzo.opzioni.map((voce) => `[ ] ${voce}`);
+      const righe: string[] = [];
+      let corrente = "";
+      for (const voce of voci) {
+        const prossima = corrente ? `${corrente}   ${voce}` : voce;
+        if (prossima.length > 78 && corrente) {
+          righe.push(corrente);
+          corrente = voce;
+        } else corrente = prossima;
+      }
+      if (corrente) righe.push(corrente);
+      const titolo = spezza(pezzo.t, 90);
+      serve(titolo.length * 12 + righe.length * 13 + 6);
+      for (const riga of titolo) {
+        testo(40, 9, "F2", riga);
+        y -= 12;
+      }
+      for (const riga of righe) {
+        testo(40, 9, "F1", riga);
+        y -= 13;
+      }
+      y -= 4;
+      continue;
+    }
+    if (pezzo.k === "sino") {
+      const righe = spezza(pezzo.t, 90);
+      serve(righe.length * 12 + 18);
+      for (const riga of righe) {
+        testo(40, 9, "F1", riga);
+        y -= 12;
+      }
+      casella(40, y - 2);
+      testo(52, 9, "F1", "Sì");
+      casella(100, y - 2);
+      testo(112, 9, "F1", "No");
+      y -= 16;
+      continue;
+    }
+    if (pezzo.k === "spunta") {
+      const righe = spezza(pezzo.t, 86);
+      serve(righe.length * 12 + 6);
+      casella(40, y - 2);
+      for (const riga of righe) {
+        testo(54, 9, "F1", riga);
+        y -= 12;
+      }
+      y -= 4;
+      continue;
+    }
+    serve(46);
+    testo(40, 8, "F1", pezzo.t);
+    y -= 26;
+    linea(40, 360, y);
+    linea(400, 555, y);
+    y -= 11;
+    testo(40, 8, "F1", "Firma");
+    testo(400, 8, "F1", "Data");
+    y -= 16;
+  }
+
+  const piede = spezza(input.piede, 100);
+  serve(piede.length * 10 + 8);
+  y -= 4;
+  for (const riga of piede) {
+    testo(40, 8, "F1", riga);
+    y -= 10;
+  }
+  chiudi();
+  return assembla(pages.filter((page) => page.trim()));
+}

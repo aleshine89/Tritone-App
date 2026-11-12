@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { AppFrame } from "@/components/app-frame";
 import { FotoPiena } from "@/components/foto-vista";
+import { NuovoViaggio, SchedaViaggio, giorniViaggio, viaggiVisibili } from "@/components/viaggio-pannello";
 import {
   aggiornaAttivitaSoci,
   creaAttivitaSoci,
@@ -12,6 +13,7 @@ import {
   type AttivitaSoci,
   type PaginaAttivitaSoci,
 } from "@/lib/fondale.functions";
+import { listaViaggi, type ViaggioBreve } from "@/lib/viaggi.functions";
 import { formatDay, oggiRoma } from "@/lib/format";
 import { linguaAttuale, messaggioErrore, useT } from "@/lib/i18n";
 import { prepareFile } from "@/lib/prepare-file";
@@ -21,10 +23,14 @@ export const Route = createFileRoute("/attivita-soci")({
     const id = Number(search.id);
     const club = Number(search.club);
     const socio = search.socio === true || search.socio === "true" || search.socio === 1 || search.socio === "1";
+    const viaggio = Number(search.viaggio);
+    const invio = search.invio === true || search.invio === "true" || search.invio === 1 || search.invio === "1";
     return {
       id: Number.isInteger(id) && id > 0 ? id : undefined,
       club: Number.isInteger(club) && club > 0 ? club : undefined,
       socio,
+      viaggio: Number.isInteger(viaggio) && viaggio > 0 ? viaggio : undefined,
+      invio,
     };
   },
   component: Page,
@@ -40,10 +46,13 @@ function Page() {
 
 function Attivita() {
   const t = useT();
+  const navigate = useNavigate();
   const ricerca = Route.useSearch();
   const cercata = ricerca.id;
   const soloSocio = ricerca.socio;
   const [dato, setDato] = useState<PaginaAttivitaSoci | null>(null);
+  const [viaggi, setViaggi] = useState<ViaggioBreve[]>([]);
+  const [viaggiPronti, setViaggiPronti] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [titolo, setTitolo] = useState("");
   const [giorno, setGiorno] = useState("");
@@ -55,9 +64,20 @@ function Attivita() {
   const [vista, setVista] = useState<"calendario" | "lista">(soloSocio ? "calendario" : vistaSalvata);
   const [mese, setMese] = useState(() => oggiRoma().slice(0, 7));
   const [giornoScelto, setGiornoScelto] = useState(oggiRoma);
+  const [composizione, setComposizione] = useState<"attivita" | "viaggio" | null>(null);
   const oggi = oggiRoma();
   const elenco = (dato?.attivita ?? []).filter((voce) => !ricerca.club || voce.clubId === ricerca.club);
+  const mieiViaggi = viaggiVisibili(viaggi).filter((item) => !ricerca.club || item.mio === "partecipo" || item.mio === "organizzo");
+  const giorniOttone = mieiViaggi.flatMap((item) => giorniViaggio(item.dal, item.al));
   const evidenziata = elenco.find((voce) => voce.id === cercata) ?? null;
+
+  function apriViaggio(id: number) {
+    void navigate({ to: "/attivita-soci", search: { ...ricerca, viaggio: id, invio: false } });
+  }
+
+  function chiudiViaggio() {
+    void navigate({ to: "/attivita-soci", search: { id: ricerca.id, club: ricerca.club, socio: ricerca.socio, viaggio: undefined, invio: false } });
+  }
 
   useEffect(() => {
     if (!evidenziata) return;
@@ -79,6 +99,18 @@ function Attivita() {
       })
       .catch((reason: unknown) => {
         if (live) setErrore(messaggioErrore(reason, "Non riesco a leggere le attività."));
+      });
+    listaViaggi()
+      .then((value) => {
+        if (live) setViaggi(value);
+      })
+      .catch((reason: unknown) => {
+        if (!live) return;
+        setViaggi([]);
+        setErrore(messaggioErrore(reason, "Non riesco a leggere i viaggi."));
+      })
+      .finally(() => {
+        if (live) setViaggiPronti(true);
       });
     return () => {
       live = false;
@@ -160,6 +192,18 @@ function Attivita() {
     }
   }
 
+  if (ricerca.invio && ricerca.viaggio) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <SchedaViaggio
+          id={ricerca.viaggio}
+          soloInvio
+          onChiudi={() => void navigate({ to: "/" })}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link to="/" className="inline-flex min-h-11 items-center gap-2 text-sm text-mist">
@@ -168,8 +212,37 @@ function Attivita() {
       </Link>
       <h1 className="mt-2 text-3xl leading-none">{t("Attività")}</h1>
       {errore ? <p className="mt-3 text-sm text-brass">{errore}</p> : null}
-      {!dato ? <p className="mt-4 text-sm text-mist">{t("Carico…")}</p> : null}
-      {dato?.puoCreare && !soloSocio ? (
+      {!ricerca.viaggio && (mieiViaggi.length > 0 || (viaggiPronti && dato?.puoCreare)) ? (
+        <section className="mt-4">
+          <h2 className="text-lg leading-none">{t("Viaggi aperti")}</h2>
+          <p className="mt-1 text-sm text-mist">{t("Apri per aggiungere persone o inviare.")}</p>
+          {mieiViaggi.length === 0 ? (
+            <p className="mt-3 text-sm text-mist">{t("Nessun viaggio aperto.")}</p>
+          ) : (
+            <ul className="mt-3 grid gap-3">
+              {mieiViaggi.map((item) => (
+                <li key={`aperto-${item.id}`}>
+                  <SchedaViaggioAperta item={item} acceso={item.dal <= giornoScelto && item.al >= giornoScelto} onApri={() => apriViaggio(item.id)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+      {ricerca.viaggio ? <SchedaViaggio id={ricerca.viaggio} onChiudi={chiudiViaggio} /> : null}
+      {!dato && !ricerca.viaggio ? <p className="mt-4 text-sm text-mist">{t("Carico…")}</p> : null}
+      {dato?.puoCreare && !soloSocio && !ricerca.viaggio ? (
+        <div className="mt-4 flex gap-2">
+          <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${composizione === "attivita" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setComposizione((value) => (value === "attivita" ? null : "attivita"))}>
+            {t("Nuova attività")}
+          </button>
+          <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${composizione === "viaggio" ? "bg-brass font-medium text-ink" : "border border-brass text-brass"}`} onClick={() => setComposizione((value) => (value === "viaggio" ? null : "viaggio"))}>
+            {t("Nuovo viaggio")}
+          </button>
+        </div>
+      ) : null}
+      {composizione === "viaggio" && !ricerca.viaggio ? <NuovoViaggio onAnnulla={() => setComposizione(null)} onCreato={apriViaggio} /> : null}
+      {dato?.puoCreare && !soloSocio && composizione === "attivita" && !ricerca.viaggio ? (
         <div className="mt-4 rounded-2xl border border-line bg-deep px-4 py-4">
           <p className="text-sm font-medium">{t("Nuova attività")}</p>
           <label className="mt-3 block text-sm">
@@ -235,8 +308,8 @@ function Attivita() {
           <SchedaAttivita voce={evidenziata} busy={busy} solaLettura={soloSocio} onIscriviti={iscriviti} onModifica={modifica} onElimina={elimina} />
         </div>
       ) : null}
-      {dato && elenco.length === 0 ? <p className="mt-4 text-sm text-mist">{t("Nessuna attività.")}</p> : null}
-      {dato && elenco.length > 0 ? (
+      {dato && elenco.length === 0 && mieiViaggi.length === 0 && !ricerca.viaggio ? <p className="mt-4 text-sm text-mist">{t("Nessuna attività.")}</p> : null}
+      {dato && (elenco.length > 0 || mieiViaggi.length > 0) && !ricerca.viaggio ? (
         <div className="mt-4 flex rounded-full border border-line p-1" role="group" aria-label={t("Attività")}>
           <button
             type="button"
@@ -256,11 +329,16 @@ function Attivita() {
           </button>
         </div>
       ) : null}
-      {dato && vista === "calendario" ? (
+      {dato && vista === "calendario" && !ricerca.viaggio ? (
         <>
-          <CalendarioAttivita mese={mese} oggi={oggi} scelto={giornoScelto} giorni={elenco.map((voce) => voce.giorno)} onMese={setMese} onGiorno={setGiornoScelto} />
+          <CalendarioAttivita mese={mese} oggi={oggi} scelto={giornoScelto} giorni={elenco.map((voce) => voce.giorno)} giorniViaggio={giorniOttone} onMese={setMese} onGiorno={(giorno) => {
+            setGiornoScelto(giorno);
+            const aperto = mieiViaggi.find((item) => item.dal <= giorno && item.al >= giorno);
+            if (!aperto) return;
+            document.getElementById(`viaggio-${aperto.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }} />
           {elenco.filter((voce) => voce.giorno === giornoScelto && voce.id !== cercata).length === 0 ? (
-            evidenziata?.giorno === giornoScelto ? null : <p className="mt-3 text-sm text-mist">{t("Nessuna attività in questo giorno.")}</p>
+            evidenziata?.giorno === giornoScelto || mieiViaggi.some((item) => item.dal <= giornoScelto && item.al >= giornoScelto) ? null : <p className="mt-3 text-sm text-mist">{t("Nessuna attività in questo giorno.")}</p>
           ) : (
             <ul className="mt-3 grid gap-3">
               {elenco.filter((voce) => voce.giorno === giornoScelto && voce.id !== cercata).map((voce) => (
@@ -270,7 +348,7 @@ function Attivita() {
           )}
         </>
       ) : null}
-      {dato && vista === "lista" ? (
+      {dato && vista === "lista" && !ricerca.viaggio ? (
         <ul className="mt-3 grid gap-3">
           {inOrdine(elenco, oggi).map((voce) => (
             <li key={voce.id} className="rounded-2xl border border-line bg-deep px-4 py-3">
@@ -283,6 +361,47 @@ function Attivita() {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+function statoViaggio(stato: string): string {
+  if (stato === "inviato") return "Inviato";
+  if (stato === "accettato") return "Accettato";
+  return "Bozza";
+}
+
+const MESI_CORTI = ["", "Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+
+function SchedaViaggioAperta({ item, acceso, onApri }: { item: ViaggioBreve; acceso: boolean; onApri: () => void }) {
+  const t = useT();
+  const giorni = giorniViaggio(item.dal, item.al);
+  const manca = Math.max(0, item.totale - item.pronti);
+  let azione = t("Apri il viaggio");
+  if (item.stato === "bozza" && item.totale === 0) azione = t("Aggiungi persone");
+  else if (item.stato === "bozza" && manca > 0) azione = t("Mancano {n} persone", { n: manca });
+  else if (item.stato === "bozza") azione = item.suTritone ? t("Invia al diving") : t("Prepara fascicolo");
+  const largo = item.totale ? Math.round((item.pronti / item.totale) * 100) : 0;
+  return (
+    <button id={`viaggio-${item.id}`} type="button" onClick={onApri} className={`w-full rounded-3xl border bg-deep px-4 py-4 text-left ${acceso ? "border-brass ring-2 ring-brass/60" : "border-brass/70"}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs uppercase tracking-wide text-brass">{t(statoViaggio(item.stato))}</p>
+        <p className="min-w-0 truncate text-xs text-mist">{item.ospite || item.club}</p>
+      </div>
+      <p className="mt-1 text-xl leading-tight">{item.titolo}</p>
+      <div className="mt-3 flex gap-1 overflow-x-auto">
+        {giorni.map((giorno) => (
+          <span key={giorno} className="flex w-10 shrink-0 flex-col items-center rounded-xl bg-abyss px-1 py-1.5">
+            <span className="text-[10px] uppercase text-brass">{t(MESI_CORTI[Number(giorno.slice(5, 7))] ?? "")}</span>
+            <span className="text-base leading-none">{Number(giorno.slice(8))}</span>
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-abyss">
+        <div className="h-full rounded-full bg-brass" style={{ width: `${largo}%` }} />
+      </div>
+      <p className="mt-1 text-xs text-mist">{t("{n} persone pronte su {totale}.", { n: item.pronti, totale: item.totale })}</p>
+      <span className="mt-3 inline-flex min-h-11 items-center rounded-full bg-brass px-4 text-sm font-medium text-ink">{azione}</span>
+    </button>
   );
 }
 
@@ -468,6 +587,7 @@ function CalendarioAttivita({
   oggi,
   scelto,
   giorni,
+  giorniViaggio = [],
   onMese,
   onGiorno,
 }: {
@@ -475,6 +595,7 @@ function CalendarioAttivita({
   oggi: string;
   scelto: string;
   giorni: string[];
+  giorniViaggio?: string[];
   onMese: (mese: string) => void;
   onGiorno: (giorno: string) => void;
 }) {
@@ -487,6 +608,7 @@ function CalendarioAttivita({
   const celle: (string | null)[] = Array.from({ length: vuoti }, () => null);
   for (let giorno = 1; giorno <= quanti; giorno += 1) celle.push(`${mese}-${String(giorno).padStart(2, "0")}`);
   const presenti = new Set(giorni);
+  const ottone = new Set(giorniViaggio);
   const nomi = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
   function sposta(delta: number) {
     const data = new Date(anno, (numero || 1) - 1 + delta, 1);
@@ -506,6 +628,7 @@ function CalendarioAttivita({
         {celle.map((data, index) => {
           if (!data) return <span key={`vuoto-${index}`} />;
           const segnato = presenti.has(data);
+          const viaggio = ottone.has(data);
           return (
             <button
               key={data}
@@ -514,7 +637,12 @@ function CalendarioAttivita({
               className={`min-h-10 rounded-lg border text-sm ${data === scelto ? "border-lagoon bg-lagoon/15" : "border-line"} ${data === oggi ? "text-lagoon" : ""}`}
             >
               {Number(data.slice(8))}
-              {segnato ? <span className="mt-0.5 block text-[10px] leading-none text-brass">•</span> : null}
+              {segnato || viaggio ? (
+                <span className="mt-0.5 flex justify-center gap-0.5 text-[10px] leading-none">
+                  {segnato ? <span className="text-lagoon">•</span> : null}
+                  {viaggio ? <span className="text-brass">•</span> : null}
+                </span>
+              ) : null}
             </button>
           );
         })}

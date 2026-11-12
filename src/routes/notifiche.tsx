@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AppFrame, useFondale } from "@/components/app-frame";
 import { NotaRichiesta } from "@/components/gestione";
-import { listNotices, markAllNoticesRead, markNoticeRead, accettaCondivisione, rifiutaCondivisione, type Notice } from "@/lib/fondale.functions";
+import { listNotices, markAllNoticesRead, markNoticeRead, accettaCondivisione, rifiutaCondivisione, firmaConvalida, type Notice } from "@/lib/fondale.functions";
 import { isStaff } from "@/lib/forms";
 import { formatWhen } from "@/lib/format";
 import { messaggioErrore, useT } from "@/lib/i18n";
@@ -80,6 +80,10 @@ function Notices() {
         return;
       }
     }
+    if (item.title === "Invia moduli viaggio" && item.shareId) {
+      await navigate({ to: "/attivita-soci", search: { id: undefined, club: undefined, socio: false, viaggio: item.shareId, invio: true } });
+      return;
+    }
     if (item.kind === "scheda" && item.submissionId > 0) {
       await navigate({ to: "/scheda/$id", params: { id: String(item.submissionId) } });
       return;
@@ -89,7 +93,7 @@ function Notices() {
       return;
     }
     if (item.kind === "esito" && item.title === "Codice pronto") {
-      await navigate({ to: "/profilo" });
+      await navigate({ to: "/profilo", search: { scuola: false } });
       return;
     }
     if (item.title === "Comunicazione ai soci") {
@@ -153,7 +157,7 @@ function Notices() {
         </button>
       </div>
       {error ? <p className="mt-3 text-sm text-brass">{error}</p> : null}
-      <Link to="/profilo" className="mt-4 inline-flex min-h-11 items-center text-sm text-lagoon">
+      <Link to="/profilo" search={{ scuola: false }} className="mt-4 inline-flex min-h-11 items-center text-sm text-lagoon">
         {t("Notifiche sul telefono")}
       </Link>
       {items === null ? <p className="mt-6 text-sm text-mist">{t("Controllo gli avvisi…")}</p> : null}
@@ -161,7 +165,27 @@ function Notices() {
       <ul className="mt-4 divide-y divide-line border-y border-line">
         {items?.map((item) => (
           <li key={item.id} className="py-3">
-            {item.kind === "condivisione" ? (
+            {item.kind === "convalida" ? (
+              <FirmaConvalida
+                item={item}
+                busy={shareBusy === item.convalidaId}
+                onFatta={async (firma) => {
+                  if (!item.convalidaId || shareBusy) return;
+                  setShareBusy(item.convalidaId);
+                  setError(null);
+                  try {
+                    await firmaConvalida({ data: { id: item.convalidaId, firma } });
+                    if (!item.read) await markNoticeRead({ data: { id: item.id } });
+                    setItems((current) => current?.map((row) => (row.id === item.id ? { ...row, read: true, shareStato: "firmata" } : row)) ?? current);
+                    await frame.refresh();
+                  } catch (reason) {
+                    setError(messaggioErrore(reason, "Non validata."));
+                  } finally {
+                    setShareBusy(null);
+                  }
+                }}
+              />
+            ) : item.kind === "condivisione" ? (
               <div>
                 <p className="text-xs text-mist">{formatWhen(item.createdAt)}{item.read ? "" : ` · ${t("nuovo")}`}</p>
                 <p className="mt-1 text-sm">{t("Immersione condivisa")}</p>
@@ -196,6 +220,94 @@ function Notices() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function FirmaConvalida({ item, busy, onFatta }: { item: Notice; busy: boolean; onFatta: (firma: string) => Promise<void> }) {
+  const t = useT();
+  const [firma, setFirma] = useState("");
+  const [tratti, setTratti] = useState(0);
+  const attesa = item.shareStato === "inviata" || item.shareStato === "";
+  return (
+    <div>
+      <p className="text-xs text-mist">{formatWhen(item.createdAt)}{item.read ? "" : ` · ${t("nuovo")}`}</p>
+      <p className="mt-1 text-sm">{t("Convalida immersione")}</p>
+      <p className="mt-1 text-sm">{item.body}</p>
+      {item.shareStato === "firmata" ? <p className="mt-2 text-sm text-lagoon">{t("Validata")}</p> : item.shareStato === "sostituita" ? <p className="mt-2 text-sm text-mist">{t("Questa richiesta non è più in attesa.")}</p> : attesa ? (
+        <>
+          <TappetoAvviso onChange={(data, n) => { setFirma(data); setTratti(n); }} />
+          <button
+            type="button"
+            disabled={busy || tratti < 1}
+            className="mt-3 min-h-12 w-full rounded-full bg-brass px-4 text-sm font-medium text-ink disabled:opacity-60"
+            onClick={() => void onFatta(firma)}
+          >
+            {busy ? t("Salvo…") : t("Conferma")}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function TappetoAvviso({ onChange }: { onChange: (data: string, tratti: number) => void }) {
+  const t = useT();
+  const ref = useRef<HTMLCanvasElement>(null);
+  const tratti = useRef(0);
+  const attivo = useRef(false);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * 2));
+    canvas.height = Math.max(1, Math.floor(rect.height * 2));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(2, 2);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#f3efe4";
+  }, []);
+
+  function punto(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = ref.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function giu(event: PointerEvent<HTMLCanvasElement>) {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    attivo.current = true;
+    const dove = punto(event);
+    ctx.beginPath();
+    ctx.moveTo(dove.x, dove.y);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function muovi(event: PointerEvent<HTMLCanvasElement>) {
+    if (!attivo.current) return;
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    const dove = punto(event);
+    ctx.lineTo(dove.x, dove.y);
+    ctx.stroke();
+    tratti.current += 1;
+  }
+
+  function su() {
+    if (!attivo.current || !ref.current) return;
+    attivo.current = false;
+    onChange(ref.current.toDataURL("image/png"), tratti.current);
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="mb-1 text-sm text-mist">{t("Firma col dito")}</p>
+      <canvas ref={ref} className="h-36 w-full touch-none rounded-xl border border-line bg-abyss" onPointerDown={giu} onPointerMove={muovi} onPointerUp={su} onPointerCancel={su} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Printer } from "lucide-react";
 import { AppFrame, useFondale } from "@/components/app-frame";
@@ -7,7 +7,7 @@ import { FotoPiena } from "@/components/foto-vista";
 import { Lucchetto } from "@/components/lucchetto";
 import { SegnoPro } from "@/components/segno-pro";
 import { ScambioLogbook } from "@/components/logbook-uddf";
-import { addLogPhoto, deleteLogPhoto, deleteLogVoice, deleteLogbook, getLogVoice, listLogPhotos, listLogbook, saveLogVoice, saveLogbook, accettaCondivisione, cercaCompagni, condividiImmersione, leggiCondivisione, type CompagnoLogbook, type LogEntry } from "@/lib/fondale.functions";
+import { addLogPhoto, deleteLogPhoto, deleteLogVoice, deleteLogbook, getLogVoice, listLogPhotos, listLogbook, saveLogVoice, saveLogbook, accettaCondivisione, cercaCompagni, cercaDivingGuida, guideDelDiving, condividiImmersione, chiediConvalida, leggiCondivisione, listBrevetti, type CompagnoLogbook, type LogEntry } from "@/lib/fondale.functions";
 import { ScadenzaField } from "@/components/scadenza-field";
 import { formatDay } from "@/lib/format";
 import { CHIAVE_PIANO_LOGBOOK } from "@/lib/planner";
@@ -16,6 +16,8 @@ import { isStaff } from "@/lib/forms";
 import { prepareFile } from "@/lib/prepare-file";
 import { SpecieLogbook } from "@/components/specie-sezione";
 import { salvaSpecieImmersione } from "@/lib/scubadex.functions";
+import { leggiLogbook } from "@/lib/fit";
+import type { UddfRiga } from "@/lib/uddf";
 
 export const Route = createFileRoute("/logbook")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -70,6 +72,15 @@ const empty = {
   condivisaDa: "",
   decompressione: "" as "" | "si" | "no",
   profilo: [] as LogEntry["profilo"],
+  oraFine: "",
+  centro: "",
+  guidaNome: "",
+  guidaFirma: "",
+  profonditaPrevista: "",
+  autorespiratore: "",
+  brevetto: "",
+  viaggioGruppoId: null as number | null,
+  convalidaGuida: "",
 };
 
 type Shot = { key: string; id: number; name: string; type: string; data: string };
@@ -119,6 +130,8 @@ function Logbook() {
   const [shareNome, setShareNome] = useState("");
   const [specieIds, setSpecieIds] = useState<string[]>([]);
   const [speciePronte, setSpeciePronte] = useState(true);
+  const [fileScelte, setFileScelte] = useState<UddfRiga[] | null>(null);
+  const [brevetti, setBrevetti] = useState<string[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const voiceReq = useRef(0);
   const openedNew = useRef(false);
@@ -203,6 +216,42 @@ function Logbook() {
     setDraft((current) => ({ ...current, lat, lng }));
   }
 
+  function applicaFile(riga: UddfRiga) {
+    setDraft((current) => ({
+      ...current,
+      ora: riga.ora || current.ora,
+      oraFine: fineDaMinuti(riga.ora || current.ora, riga.minuti) || current.oraFine,
+      profondita: riga.profondita || current.profondita,
+      minuti: riga.minuti || current.minuti,
+      miscela: riga.miscela === "Nitrox" || riga.miscela === "Trimix" ? riga.miscela : current.miscela,
+      ossigeno: riga.ossigeno || current.ossigeno,
+      profilo: riga.profilo.length > 1 ? riga.profilo : current.profilo,
+    }));
+    setFileScelte(null);
+    setError(null);
+  }
+
+  async function unisciFile(file: File) {
+    setError(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const esito = leggiLogbook(bytes);
+      if (!esito.uddf && !esito.immersioni.length) throw new Error("Il file non è un .fit o un UDDF.");
+      if (!esito.immersioni.length) throw new Error("In questo file non trovo un'immersione.");
+      const delGiorno = esito.immersioni.filter((riga) => riga.data === draft.data);
+      const scelte = delGiorno.length ? delGiorno : esito.immersioni;
+      if (!delGiorno.length && esito.immersioni.length > 1) {
+        setFileScelte(esito.immersioni);
+        setError(t("In questo file non c'è un'immersione in questa data. Scegline una."));
+        return;
+      }
+      if (scelte.length === 1) applicaFile(scelte[0]);
+      else setFileScelte(scelte);
+    } catch (reason) {
+      setError(messaggioErrore(reason, "Non riesco a leggere il file."));
+    }
+  }
+
   function fromPhone() {
     if (!navigator.geolocation) {
       setError(t("Questo telefono non dà la posizione. Tocca la mappa per metterla."));
@@ -256,6 +305,20 @@ function Logbook() {
     };
   }, [frame.profile?.userId]);
 
+  useEffect(() => {
+    let live = true;
+    void listBrevetti()
+      .then((carte) => {
+        if (!live) return;
+        const voci = carte.map((carta) => [carta.livello || carta.titolo, carta.ente].filter(Boolean).join(" · ")).filter(Boolean);
+        setBrevetti([...new Set(voci)]);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [frame.profile?.userId]);
+
   function edit(entry: LogEntry) {
     setDraft(entry);
     setModifica(false);
@@ -266,6 +329,7 @@ function Logbook() {
     setShots([]);
     setClip(null);
     setHadVoice(false);
+    setFileScelte(null);
     setSpecieIds([]);
     setSpeciePronte(false);
     const req = ++voiceReq.current;
@@ -318,6 +382,7 @@ function Logbook() {
     setModifica(false);
     setShareId(null);
     setShareNome("");
+    setFileScelte(null);
     setSpecieIds([]);
     setSpeciePronte(true);
     voiceReq.current += 1;
@@ -369,7 +434,8 @@ function Logbook() {
         void navigate({ to: "/logbook", search: { nuova: undefined, condivisione: undefined } });
         return;
       }
-      const savedEntry = await saveLogbook({ data: draft });
+      const daSalvare = { ...draft, oraFine: draft.oraFine || fineDaMinuti(draft.ora, draft.minuti) };
+      const savedEntry = await saveLogbook({ data: daSalvare });
       if (speciePro && (draft.id === 0 || speciePronte)) {
         await salvaSpecieImmersione({ data: { entryId: savedEntry.id, ids: specieIds, giorno: draft.data } });
       }
@@ -503,6 +569,16 @@ function Logbook() {
               onModifica={() => setModifica(true)}
               onCondividi={() => setCondividi(draft)}
               onChiudi={close}
+              onValidata={(nome, firma) => {
+                setDraft((current) => ({ ...current, guidaNome: nome, guidaFirma: firma, convalidaGuida: "" }));
+                setItems((rows) => rows?.map((row) => (row.id === draft.id ? { ...row, guidaNome: nome, guidaFirma: firma, convalidaGuida: "" } : row)) ?? null);
+                setSaved(t("Immersione validata"));
+              }}
+              onRichiesta={(nome) => {
+                setDraft((current) => ({ ...current, convalidaGuida: nome }));
+                setItems((rows) => rows?.map((row) => (row.id === draft.id ? { ...row, convalidaGuida: nome } : row)) ?? null);
+                setSaved(t("Richiesta inviata. La guida firma dal suo Tritone."));
+              }}
               onPreview={setPreview}
               preview={preview}
               specie={{ entryId: draft.id, pro: speciePro, giorno: draft.data, ids: specieIds, onChange: cambiaSpecie }}
@@ -518,6 +594,7 @@ function Logbook() {
             }}
           >
             <h2 id={draft.id ? "logbook-finestra" : undefined} className="text-2xl">{shareId ? t("Modifica immersione") : draft.id ? t("Modifica immersione") : t("Nuova immersione")}</h2>
+            {frame.profile ? <p className="mt-1 text-sm text-mist">{`${frame.profile.nome} ${frame.profile.cognome}`.trim()}</p> : null}
             {shareNome ? <p className="mt-1 text-xs text-lagoon">{t("condivisa da {nome}", { nome: shareNome })}</p> : null}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Field label={t("Data")}>
@@ -534,6 +611,15 @@ function Logbook() {
               </Field>
               <Field label={t("Profondità max (m)")}>
                 <input inputMode="decimal" value={draft.profondita} onChange={(event) => setDraft({ ...draft, profondita: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Profondità programmata (m)")}>
+                <input inputMode="decimal" value={draft.profonditaPrevista} onChange={(event) => setDraft({ ...draft, profonditaPrevista: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Ora di inizio")}>
+                <input type="time" value={draft.ora} onChange={(event) => setDraft({ ...draft, ora: event.target.value.slice(0, 5) })} className={inputClass} />
+              </Field>
+              <Field label={t("Ora di fine")}>
+                <input type="time" value={draft.oraFine} onChange={(event) => setDraft({ ...draft, oraFine: event.target.value.slice(0, 5) })} className={inputClass} />
               </Field>
               <Field label={t("Tempo (minuti)")}>
                 <input inputMode="numeric" value={draft.minuti} onChange={(event) => setDraft({ ...draft, minuti: event.target.value })} className={inputClass} />
@@ -557,6 +643,23 @@ function Logbook() {
                   </button>
                 </div>
               </fieldset>
+              <Field label={t("Tipo di autorespiratore")}>
+                <select value={draft.autorespiratore} onChange={(event) => setDraft({ ...draft, autorespiratore: event.target.value })} className={inputClass}>
+                  <option value="">—</option>
+                  <option value="Circuito aperto">{t("Circuito aperto")}</option>
+                  <option value="Rebreather">Rebreather</option>
+                  <option value="Aria di superficie">{t("Aria di superficie")}</option>
+                </select>
+              </Field>
+              <Field label={t("Centro")}>
+                <input value={draft.centro} onChange={(event) => setDraft({ ...draft, centro: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Tipo di brevetto")}>
+                <input value={draft.brevetto} onChange={(event) => setDraft({ ...draft, brevetto: event.target.value })} className={inputClass} list="brevetti-log" />
+                <datalist id="brevetti-log">
+                  {brevetti.map((voce) => <option key={voce} value={voce} />)}
+                </datalist>
+              </Field>
               <Field label={t("Miscela")}>
                 <select value={draft.miscela} onChange={(event) => setDraft({ ...draft, miscela: event.target.value })} className={inputClass}>
                   <option value="Aria">{t("Aria")}</option>
@@ -577,6 +680,37 @@ function Logbook() {
                 <span className="mb-1 block text-mist">{t("Note")}</span>
                 <textarea value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} className={`${inputClass} min-h-24 py-2`} />
               </label>
+              {draft.id ? (
+                <div className="sm:col-span-2">
+                  <p className="mb-1 text-sm text-mist">{t("Aggiungi file del computer")}</p>
+                  <p className="mb-2 text-xs text-mist">{t("Un file .fit o UDDF di questa immersione sistema ora di ingresso, ora di uscita e, se ci sono, profondità, durata e grafico. Il resto non si cancella.")}</p>
+                  <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line px-4 text-sm">
+                    {t("Scegli file")}
+                    <input
+                      type="file"
+                      accept=".fit,.xml,.uddf,application/xml,text/xml"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) void unisciFile(file);
+                      }}
+                    />
+                  </label>
+                  {draft.profilo.length > 1 ? <div className="mt-3 h-16"><CurvaProfilo punti={draft.profilo} /></div> : null}
+                  {fileScelte ? (
+                    <ul className="mt-3 grid gap-2">
+                      {fileScelte.map((riga, index) => (
+                        <li key={`${riga.data}-${riga.ora}-${index}`}>
+                          <button type="button" className="min-h-11 w-full rounded-xl border border-line px-3 text-left text-sm" onClick={() => applicaFile(riga)}>
+                            {formatDay(riga.data)} {riga.ora} · {riga.localita || t("Senza località")} · {riga.profondita ? `${riga.profondita} m` : ""}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="sm:col-span-2">
                 <p className="mb-1 text-sm text-mist">{t("Punto GPS")}</p>
                 <p className="mb-2 text-xs text-mist">{t("La mappa si apre sul punto del telefono. Puoi spostarlo toccando o trascinando.")}</p>
@@ -720,6 +854,7 @@ function Logbook() {
                         {row.profilo.length > 1 ? <CurvaProfilo punti={row.profilo} /> : null}
                         <span className="relative truncate text-sm font-medium">{row.punto || nomeSito(row.localita, t)}</span>
                         <span className="relative text-sm text-mist">{formatDay(row.data)}{row.ora ? ` ${row.ora}` : ""}</span>
+                        {row.guidaFirma ? <span className="relative text-xs text-lagoon">{t("Validata")}</span> : null}
                       </span>
                       <span className="flex shrink-0 flex-col items-end justify-center px-3 text-sm">
                         <span>{row.profondita ? `${row.profondita} m` : "—"}</span>
@@ -786,6 +921,257 @@ function Logbook() {
 }
 
 const inputClass = "min-h-11 w-full rounded-xl border border-line bg-deep px-3 text-foam outline-none focus-visible:border-brass";
+
+function ValidaImmersione({ entry, onFatta, onRichiesta }: { entry: LogEntry; onFatta: (nome: string, firma: string) => void; onRichiesta: (nome: string) => void }) {
+  const t = useT();
+  const [aperta, setAperta] = useState(false);
+  const [mano, setMano] = useState(false);
+  const [q, setQ] = useState("");
+  const [diving, setDiving] = useState<{ id: number; nome: string; sede: string } | null>(null);
+  const [divingTrovati, setDivingTrovati] = useState<{ id: number; nome: string; sede: string }[] | null>(null);
+  const [guide, setGuide] = useState<CompagnoLogbook[] | null>(null);
+  const [nome, setNome] = useState("");
+  const [cognome, setCognome] = useState("");
+  const [scelta, setScelta] = useState<CompagnoLogbook | null>(null);
+  const [firma, setFirma] = useState("");
+  const [tratti, setTratti] = useState(0);
+  const [errore, setErrore] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (mano || diving) return;
+    const testo = q.trim();
+    if (testo.length < 2) {
+      setDivingTrovati(null);
+      return;
+    }
+    let live = true;
+    const timer = window.setTimeout(() => {
+      void cercaDivingGuida({ data: { q: testo } })
+        .then((lista) => {
+          if (live) setDivingTrovati(lista);
+        })
+        .catch(() => {
+          if (live) setDivingTrovati([]);
+        });
+    }, 250);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [q, mano, diving]);
+
+  useEffect(() => {
+    if (!diving) {
+      setGuide(null);
+      return;
+    }
+    let live = true;
+    void guideDelDiving({ data: { clubId: diving.id } })
+      .then((lista) => {
+        if (live) setGuide(lista);
+      })
+      .catch(() => {
+        if (live) setGuide([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [diving]);
+
+  if (entry.guidaFirma) return null;
+  if (entry.convalidaGuida && !aperta) {
+    return (
+      <div>
+        <p className="text-sm text-brass">{t("In attesa della firma di {nome}", { nome: entry.convalidaGuida })}</p>
+        <button type="button" className="mt-2 min-h-11 text-sm text-lagoon" onClick={() => setAperta(true)}>{t("Chiedi a un'altra guida")}</button>
+      </div>
+    );
+  }
+
+  const guidaMano = `${cognome} ${nome}`.trim();
+
+  async function chiedi() {
+    if (!scelta) {
+      setErrore(t("Scegli la guida."));
+      return;
+    }
+    setBusy(true);
+    setErrore(null);
+    try {
+      const esito = await chiediConvalida({ data: { entryId: entry.id, guidaUserId: scelta.userId } });
+      onRichiesta(esito.guida);
+      setAperta(false);
+    } catch (reason) {
+      setErrore(messaggioErrore(reason, "Richiesta non inviata."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function conferma() {
+    if (!guidaMano) {
+      setErrore(t("Scrivi nome e cognome."));
+      return;
+    }
+    if (tratti < 1 || !firma.startsWith("data:image/png;base64,")) {
+      setErrore(t("Fai firmare la guida col dito"));
+      return;
+    }
+    setBusy(true);
+    setErrore(null);
+    try {
+      await saveLogbook({ data: { ...entry, guidaNome: guidaMano, guidaFirma: firma } });
+      onFatta(guidaMano, firma);
+      setAperta(false);
+    } catch (reason) {
+      setErrore(messaggioErrore(reason, "Non validata."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      {aperta ? null : (
+        <button type="button" className="min-h-12 w-full rounded-full bg-brass px-4 text-sm font-medium text-ink" onClick={() => setAperta(true)}>
+          {t("Valida immersione")}
+        </button>
+      )}
+      {aperta ? (
+        <div className="rounded-2xl border border-line bg-deep px-4 py-4">
+          <p className="text-sm font-medium">{t("Valida immersione")}</p>
+          {mano ? (
+            <>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  <span className="mb-1 block text-mist">{t("Cognome")}</span>
+                  <input value={cognome} onChange={(event) => setCognome(event.target.value)} className={inputClass} />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-mist">{t("Nome")}</span>
+                  <input value={nome} onChange={(event) => setNome(event.target.value)} className={inputClass} />
+                </label>
+              </div>
+              <button type="button" className="mt-3 min-h-11 text-sm text-lagoon" onClick={() => setMano(false)}>{t("È su Tritone")}</button>
+              {guidaMano ? <TappetoFirmaLog onChange={(data, n) => { setFirma(data); setTratti(n); }} /> : null}
+            </>
+          ) : (
+            <>
+              <label className="mt-3 block text-sm">
+                <span className="mb-1 block text-mist">{t("Cerca il diving")}</span>
+                <input value={diving ? diving.nome : q} onChange={(event) => { setDiving(null); setScelta(null); setGuide(null); setQ(event.target.value); }} className={inputClass} />
+              </label>
+              {diving ? (
+                <>
+                  {diving.sede ? <p className="mt-1 text-xs text-mist">{diving.sede}</p> : null}
+                  <button type="button" className="mt-1 min-h-11 text-sm text-lagoon" onClick={() => { setDiving(null); setScelta(null); setQ(""); }}>{t("Cambia diving")}</button>
+                  <p className="mt-3 text-sm text-mist">{t("Guide del diving")}</p>
+                  {scelta ? <p className="mt-1 text-sm text-lagoon">{`${scelta.cognome} ${scelta.nome}`.trim()}</p> : null}
+                  {guide && guide.length === 0 ? <p className="mt-2 text-sm text-mist">{t("Nessuna guida in questo diving.")}</p> : null}
+                  <ul className="mt-1">
+                    {(guide ?? []).map((persona) => {
+                      const etichetta = `${persona.cognome} ${persona.nome}`.trim();
+                      const sceltaQuesta = scelta?.userId === persona.userId;
+                      return (
+                        <li key={persona.userId}>
+                          <button type="button" className={`min-h-11 w-full text-left text-sm ${sceltaQuesta ? "text-lagoon" : ""}`} onClick={() => setScelta(persona)}>
+                            {etichetta}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  {q.trim().length >= 2 && divingTrovati && divingTrovati.length === 0 ? <p className="mt-2 text-sm text-mist">{t("Nessun diving con questo nome.")}</p> : null}
+                  <ul className="mt-2">
+                    {(divingTrovati ?? []).map((centro) => (
+                      <li key={centro.id}>
+                        <button type="button" className="min-h-11 w-full text-left text-sm" onClick={() => { setDiving(centro); setQ(""); setDivingTrovati(null); setScelta(null); }}>
+                          {centro.nome}
+                          {centro.sede ? <span className="block text-xs text-mist">{centro.sede}</span> : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="mt-2 text-xs text-mist">{t("La guida riceve l'avviso e firma dal suo Tritone.")}</p>
+              <button type="button" className="mt-1 min-h-11 text-sm text-lagoon" onClick={() => setMano(true)}>{t("Non è su Tritone")}</button>
+            </>
+          )}
+          {errore ? <p className="mt-3 text-sm text-brass">{errore}</p> : null}
+          <button type="button" disabled={busy || (mano ? !guidaMano : !scelta)} className="mt-3 min-h-12 w-full rounded-full bg-brass px-4 text-sm font-medium text-ink disabled:opacity-60" onClick={() => void (mano ? conferma() : chiedi())}>
+            {busy ? t("Salvo…") : mano ? t("Firma e valida") : t("Chiedi la firma")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TappetoFirmaLog({ onChange }: { onChange: (data: string, tratti: number) => void }) {
+  const t = useT();
+  const ref = useRef<HTMLCanvasElement>(null);
+  const tratti = useRef(0);
+  const attivo = useRef(false);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * 2));
+    canvas.height = Math.max(1, Math.floor(rect.height * 2));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(2, 2);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#f3efe4";
+  }, []);
+
+  function punto(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = ref.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  function giu(event: PointerEvent<HTMLCanvasElement>) {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    attivo.current = true;
+    const dove = punto(event);
+    ctx.beginPath();
+    ctx.moveTo(dove.x, dove.y);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function muovi(event: PointerEvent<HTMLCanvasElement>) {
+    if (!attivo.current) return;
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    const dove = punto(event);
+    ctx.lineTo(dove.x, dove.y);
+    ctx.stroke();
+    tratti.current += 1;
+  }
+
+  function su() {
+    if (!attivo.current || !ref.current) return;
+    attivo.current = false;
+    onChange(ref.current.toDataURL("image/png"), tratti.current);
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="mb-1 text-sm text-mist">{t("Fai firmare la guida col dito")}</p>
+      <canvas ref={ref} className="h-36 w-full touch-none rounded-xl border border-line bg-abyss" onPointerDown={giu} onPointerMove={muovi} onPointerUp={su} onPointerCancel={su} />
+    </div>
+  );
+}
 
 function CondividiCompagni({
   entryId,
@@ -927,10 +1313,14 @@ function VistaImmersione({
   onModifica,
   onCondividi,
   onChiudi,
+  onValidata,
+  onRichiesta,
   onPreview,
   specie,
 }: {
   draft: {
+    id: number;
+    viaggioGruppoId: number | null;
     data: string;
     ora: string;
     localita: string;
@@ -945,10 +1335,18 @@ function VistaImmersione({
     note: string;
     decompressione: "" | "si" | "no";
     profilo: LogEntry["profilo"];
+    oraFine: string;
+    centro: string;
+    guidaNome: string;
+    guidaFirma: string;
+    profonditaPrevista: string;
+    autorespiratore: string;
+    brevetto: string;
     lat: string;
     lng: string;
     foto: number;
     voce: number;
+    convalidaGuida: string;
   };
   shots: { key: string; name: string; data: string }[];
   clip: { data: string } | null;
@@ -956,22 +1354,34 @@ function VistaImmersione({
   onModifica: () => void;
   onCondividi: () => void;
   onChiudi: () => void;
+  onValidata: (nome: string, firma: string) => void;
+  onRichiesta: (nome: string) => void;
   onPreview: (src: string | null) => void;
   specie: { entryId: number; pro: boolean; giorno: string; ids: string[]; onChange: (ids: string[]) => void };
 }) {
   const t = useT();
+  const frame = useFondale();
   const sito = nomeSito(draft.localita, t);
+  const chi = frame.profile ? `${frame.profile.nome} ${frame.profile.cognome}`.trim() : "";
   const righe: { etichetta: string; valore: string }[] = [
+    { etichetta: t("Subacqueo"), valore: chi || "—" },
+    { etichetta: t("Tipo di brevetto"), valore: draft.brevetto || "—" },
     { etichetta: t("Data"), valore: `${formatDay(draft.data)}${draft.ora ? ` ${draft.ora}` : ""}` },
     { etichetta: t("Località"), valore: sito },
   ];
   if (draft.punto) righe.push({ etichetta: t("Punto"), valore: draft.punto });
   righe.push(
-    { etichetta: t("Profondità max (m)"), valore: draft.profondita ? `${draft.profondita} m` : t("Profondità non indicata") },
-    { etichetta: t("Tempo (minuti)"), valore: draft.minuti ? `${draft.minuti} min` : t("Durata non indicata") },
+    { etichetta: t("Ora di inizio"), valore: draft.ora || "—" },
+    { etichetta: t("Ora di fine"), valore: draft.oraFine || "—" },
+    { etichetta: t("Profondità programmata (m)"), valore: draft.profonditaPrevista ? `${draft.profonditaPrevista} m` : "—" },
+    { etichetta: t("Profondità max (m)"), valore: draft.profondita ? `${draft.profondita} m` : "—" },
+    { etichetta: t("Tipo di autorespiratore"), valore: draft.autorespiratore ? t(draft.autorespiratore) : "—" },
+    { etichetta: t("Miscela"), valore: draft.miscela === "Aria" ? t("Aria") : draft.miscela || "—" },
+    { etichetta: t("Centro"), valore: draft.centro || "—" },
+    { etichetta: t("Tempo (minuti)"), valore: draft.minuti ? `${draft.minuti} min` : "—" },
   );
+  if (draft.guidaNome) righe.push({ etichetta: t("Guida"), valore: draft.guidaNome });
   if (draft.buddy) righe.push({ etichetta: t("Compagno"), valore: draft.buddy });
-  if (draft.miscela) righe.push({ etichetta: t("Miscela"), valore: draft.miscela === "Aria" ? t("Aria") : draft.miscela });
   if (draft.ossigeno) righe.push({ etichetta: t("Ossigeno %"), valore: draft.ossigeno });
   if (draft.temperatura) righe.push({ etichetta: t("Temperatura (°C)"), valore: draft.temperatura });
   if (draft.visibilita) righe.push({ etichetta: t("Visibilità (m)"), valore: draft.visibilita });
@@ -994,6 +1404,21 @@ function VistaImmersione({
           </div>
         ) : null}
       </dl>
+      {draft.profilo.length > 1 ? (
+        <div className="mt-4 h-24">
+          <CurvaProfilo punti={draft.profilo} />
+        </div>
+      ) : null}
+      {draft.guidaFirma ? (
+        <div className="mt-4">
+          <p className="mb-1 text-xs text-lagoon">{t("Validata da {nome}", { nome: draft.guidaNome || t("la guida") })}</p>
+          <img src={draft.guidaFirma} alt={t("Firma della guida")} className="h-24 rounded-xl border border-line bg-abyss" />
+        </div>
+      ) : !draft.viaggioGruppoId ? (
+        <div className="mt-4">
+          <ValidaImmersione entry={{ ...draft, condivisaDa: "" }} onFatta={onValidata} onRichiesta={onRichiesta} />
+        </div>
+      ) : null}
       {draft.lat && draft.lng ? (
         <div className="mt-4">
           <p className="mb-1 text-xs text-mist">{t("Punto GPS")}</p>
@@ -1042,6 +1467,15 @@ function VistaImmersione({
       </div>
     </section>
   );
+}
+
+function fineDaMinuti(ora: string, minuti: string): string {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(ora)) return "";
+  const n = Number(minuti);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const [ore, minutiOra] = ora.split(":").map(Number);
+  const totale = ore * 60 + minutiOra + Math.round(n);
+  return `${String(Math.floor(totale / 60) % 24).padStart(2, "0")}:${String(totale % 60).padStart(2, "0")}`;
 }
 
 function eDeco(row: { decompressione: "" | "si" | "no"; profilo: LogEntry["profilo"] }): boolean {

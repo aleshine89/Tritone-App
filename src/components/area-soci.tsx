@@ -126,7 +126,7 @@ export function AreaSoci() {
             <Link to="/comunicazioni-soci" className="inline-flex min-h-11 items-center rounded-full bg-lagoon px-4 text-sm font-medium text-ink">
               {t("Comunicazioni e documenti")}
             </Link>
-            <Link to="/attivita-soci" search={{ id: undefined, club: undefined, socio: false }} className="inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm font-medium">
+            <Link to="/attivita-soci" search={{ id: undefined, club: undefined, socio: false, viaggio: undefined, invio: false }} className="inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm font-medium">
               {t("Attività")}
             </Link>
           </div>
@@ -680,7 +680,7 @@ export function IMieiDiving() {
                   <button type="button" className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium text-ink" onClick={() => setSchermata({ tipo: "tessera", row })}>
                     {t("Tessera")}
                   </button>
-                  <Link to="/attivita-soci" search={{ id: undefined, club: row.clubId, socio: true }} className="inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm">
+                  <Link to="/attivita-soci" search={{ id: undefined, club: row.clubId, socio: true, viaggio: undefined, invio: false }} className="inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm">
                     {t("Attività")}
                   </Link>
                   <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" onClick={() => setSchermata({ tipo: "documenti", row })}>

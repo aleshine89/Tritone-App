@@ -67,7 +67,7 @@ function Piano() {
 
   return (
     <div className="mx-auto max-w-xl">
-      <Link to="/profilo" className="text-sm text-lagoon">{t("Profilo")}</Link>
+      <Link to="/profilo" search={{ scuola: false }} className="text-sm text-lagoon">{t("Profilo")}</Link>
       <h1 className="mt-2 text-3xl leading-none">{t("Pagamento")}</h1>
       <p className="mt-3 text-sm text-mist">
         {tipo === "sub"

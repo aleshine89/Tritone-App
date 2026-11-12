@@ -10,6 +10,7 @@ import { cifra, decifra, chiaveMia, chiaveSulTelefono, salvaChiaveSulTelefono, c
 import { applicaAnagrafica, leggiAnagraficaLocale, salvaAnagraficaLocale } from "@/lib/anagrafica";
 import { prepareFile, prepareFotoModulo } from "@/lib/prepare-file";
 import { emptyData, campiMancanti, formByKey, haCampiChiusi, CAMPI_CHIUSI, chiaveSanitaria, medicalAlert, svuotaDecompressive, anniIscrizione, type Field, type FormDef } from "@/lib/forms";
+import { leggiModuloViaggio, salvaModuloViaggio } from "@/lib/viaggi.functions";
 import { ScadenzaField } from "@/components/scadenza-field";
 import { formatDay, formatWhen } from "@/lib/format";
 import { linguaAttuale, messaggioErrore, tScelta, useT, type Traduci } from "@/lib/i18n";
@@ -26,10 +27,23 @@ const MODULI_LETTURA = new Set([
 const inputClass =
   "min-h-11 w-full border-0 border-b border-rule bg-transparent px-0 text-ink outline-none focus-visible:border-lagoon";
 
+function mancaFirmaViaggio(form: FormDef, corrente: Record<string, string>): string[] {
+  const vuoti = campiMancanti(form, corrente);
+  for (const field of form.fields) {
+    if (field.type !== "sign" || !("label" in field)) continue;
+    if (field.key === "firma_genitore" && corrente.minorenne !== "si") continue;
+    if (field.key !== "firma" && field.key !== "firma_genitore") continue;
+    const value = corrente[field.key] ?? "";
+    if (!value.startsWith("data:image/") && !vuoti.includes(field.label)) vuoti.push(field.label);
+  }
+  return vuoti;
+}
+
 export function SchedaEditor({
   formKey,
   existing,
   soloLettura = false,
+  viaggio,
 }: {
   formKey: string;
   existing?: {
@@ -45,6 +59,14 @@ export function SchedaEditor({
     modifiche?: { nome: string; modifiedAt: string }[];
   };
   soloLettura?: boolean;
+  viaggio?: {
+    personaId: number;
+    clubNome: string;
+    dal: string;
+    al: string;
+    onInviato: () => void;
+    onChiudi: () => void;
+  };
 }) {
   const form = formByKey(formKey);
   const frame = useFondale();
@@ -64,7 +86,8 @@ export function SchedaEditor({
   const [mancanti, setMancanti] = useState<string[] | null>(null);
   const [confermaInvio, setConfermaInvio] = useState(false);
   const [inviatoA, setInviatoA] = useState<{ nome: string; id: number | null; hasLogo: boolean } | null>(null);
-  const [passo, setPasso] = useState(0);
+  const [passo, setPasso] = useState(viaggio ? 1 : 0);
+  const [pronto, setPronto] = useState(!viaggio);
   const [cerca, setCerca] = useState("");
   const [modifica, setModifica] = useState(false);
   const [modifiche, setModifiche] = useState<{ nome: string; modifiedAt: string }[]>(existing?.modifiche ?? []);
@@ -77,6 +100,7 @@ export function SchedaEditor({
   }, []);
 
   useEffect(() => {
+    if (viaggio) return;
     if (existing) {
       const payload = { ...existing.payload };
       if (!payload.data_immersione && payload.data_attivita) payload.data_immersione = payload.data_attivita;
@@ -120,9 +144,70 @@ export function SchedaEditor({
     };
   }, [existing?.id, formKey, frame.profile?.userId, frame.email, frame.desk, frame.comeCliente]);
 
+  useEffect(() => {
+    if (!viaggio || !form || !frame.profile) return;
+    let live = true;
+    const personaId = viaggio.personaId;
+    const clubNome = viaggio.clubNome;
+    const chiave = form.key;
+    const lettura = soloLettura;
+    if (!lettura) {
+      const seed = emptyData(form, {
+        cognome: frame.profile.cognome,
+        nome: frame.profile.nome,
+        telefono: frame.profile.telefono,
+        email: frame.email ?? "",
+        centro: viaggio.clubNome,
+        oggi: frame.oggi,
+      });
+      if (form.key === "registro-immersione") {
+        if (viaggio.dal) {
+          seed.data_inizio = viaggio.dal;
+          seed.data_immersione = viaggio.dal;
+        }
+        if (viaggio.al) seed.data_fine = viaggio.al;
+      }
+      if (form.key === "questionario-medico" && viaggio.clubNome) seed.struttura = viaggio.clubNome;
+      setData(applicaAnagrafica(seed, leggiAnagraficaLocale()));
+    }
+    void (async () => {
+      try {
+        const salvato = await leggiModuloViaggio({ data: { personaId, chiave } });
+        if (!live) return;
+        setData((current) => {
+          const next = lettura ? {} : { ...current };
+          for (const [key, value] of Object.entries(salvato.campi)) {
+            if (value.trim()) next[key] = value;
+          }
+          return next;
+        });
+      } catch {
+        /* restano i dati già noti */
+      }
+      if (!lettura) {
+        try {
+          const busta = await getAnagrafica();
+          if (live && busta) {
+            const extra = JSON.parse(await decifraFile(busta)) as Record<string, string>;
+            if (live) {
+              salvaAnagraficaLocale(extra);
+              setData((current) => applicaAnagrafica(current, extra));
+            }
+          }
+        } catch {
+          /* l'anagrafica sul telefono basta */
+        }
+      }
+      if (live) setPronto(true);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [viaggio?.personaId, viaggio?.clubNome, viaggio?.dal, viaggio?.al, formKey, frame.profile?.userId, frame.email, frame.oggi, soloLettura]);
+
   const sulCampoUltima =
     formKey === "brevetto-esperienza" &&
-    !(frame.desk && !frame.comeCliente) &&
+    (Boolean(viaggio) || !(frame.desk && !frame.comeCliente)) &&
     (modifica ||
       sezioni.some(
         (sezione, index) =>
@@ -149,6 +234,7 @@ export function SchedaEditor({
   }, [sulCampoUltima]);
 
   useEffect(() => {
+    if (viaggio) return;
     const raw = sessionStorage.getItem("diving-hub-inviato");
     if (!raw) return;
     sessionStorage.removeItem("diving-hub-inviato");
@@ -167,6 +253,7 @@ export function SchedaEditor({
   }, [passo]);
 
   useEffect(() => {
+    if (viaggio) return;
     let live = true;
     listDivingScelte()
       .then((items) => {
@@ -292,10 +379,35 @@ export function SchedaEditor({
     );
   }
 
+  if (viaggio && !pronto) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <button type="button" onClick={viaggio.onChiudi} className="inline-flex min-h-11 items-center gap-2 text-sm text-mist">
+          <ArrowLeft className="size-4" />
+          {t("Torna al viaggio")}
+        </button>
+        <p className="mt-3 text-sm text-mist">{t("Carico…")}</p>
+      </div>
+    );
+  }
+  if (viaggio && soloLettura) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <button type="button" onClick={viaggio.onChiudi} className="no-print mb-4 inline-flex min-h-11 items-center gap-2 text-sm text-mist">
+          <ArrowLeft className="size-4" />
+          {t("Torna al viaggio")}
+        </button>
+        <p className="text-xs font-medium uppercase tracking-widest text-lagoon">{t("Per questo viaggio · {nome}", { nome: viaggio.clubNome })}</p>
+        <h1 className="mt-1 text-3xl leading-none">{t(form.title)}</h1>
+        <FoglioScheda form={form} dati={data} />
+      </div>
+    );
+  }
+
   const scelto = scuole.find((item) => item.id === scuolaId);
 
   const alert = form.key === "questionario-medico" && medicalAlert(data);
-  const vuotiOra = [...(scuolaId === "" ? ["Diving di destinazione"] : []), ...campiMancanti(form, data)];
+  const vuotiOra = viaggio ? mancaFirmaViaggio(form, data) : [...(scuolaId === "" ? ["Diving di destinazione"] : []), ...campiMancanti(form, data)];
 
   function datiCorrenti() {
     const root = foglio.current;
@@ -319,7 +431,7 @@ export function SchedaEditor({
   function chiediInvio() {
     const corrente = datiCorrenti();
     setData(corrente);
-    const vuoti = [...(scuolaId === "" ? ["Diving di destinazione"] : []), ...campiMancanti(form!, corrente)];
+    const vuoti = viaggio ? mancaFirmaViaggio(form!, corrente) : [...(scuolaId === "" ? ["Diving di destinazione"] : []), ...campiMancanti(form!, corrente)];
     if (vuoti.length) {
       setMancanti(vuoti);
       setMessage(null);
@@ -331,6 +443,36 @@ export function SchedaEditor({
   async function persist(status: "bozza" | "inviato", opts?: { modifica?: boolean }) {
     const corrente = datiCorrenti();
     setData(corrente);
+    if (viaggio) {
+      const vuotiViaggio = mancaFirmaViaggio(form!, corrente);
+      if (vuotiViaggio.length) {
+        setMancanti(vuotiViaggio);
+        setMessage(null);
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      setMessage(null);
+      try {
+        await salvaModuloViaggio({
+          data: {
+            personaId: viaggio.personaId,
+            chiave: form!.key,
+            origine: "utente",
+            campi: corrente,
+            foto: "",
+            bozza: status !== "inviato",
+          },
+        });
+        if (status === "inviato") viaggio.onInviato();
+        else setMessage("Bozza salvata.");
+      } catch (reason) {
+        setError(messaggioErrore(reason, "Salvataggio non riuscito."));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const chiusiVuoti = Boolean(opts?.modifica && existing?.payload.cifrato);
     const solo = chiusiVuoti
       ? new Set(
@@ -466,7 +608,7 @@ export function SchedaEditor({
   function avanti() {
     const corrente = datiCorrenti();
     setData(corrente);
-    if (passo === 0 && scuolaId === "") {
+    if (!viaggio && passo === 0 && scuolaId === "") {
       setMancanti(["Diving di destinazione"]);
       return;
     }
@@ -485,10 +627,17 @@ export function SchedaEditor({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="no-print mb-4 flex items-center justify-between gap-3">
+        {viaggio ? (
+          <button type="button" onClick={viaggio.onChiudi} className="inline-flex min-h-11 items-center gap-2 text-sm text-mist">
+            <ArrowLeft className="size-4" />
+            {t("Torna al viaggio")}
+          </button>
+        ) : (
         <Link to="/moduli" className="inline-flex min-h-11 items-center gap-2 text-sm text-mist">
           <ArrowLeft className="size-4" />
           {t("Moduli")}
         </Link>
+        )}
         <button
           type="button"
           onClick={() => window.print()}
@@ -508,7 +657,7 @@ export function SchedaEditor({
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-widest text-lagoon">{t(form.kicker)}</p>
             <h1 className="mt-1 text-3xl text-ink">{t(form.title)}</h1>
-            <p className="mt-1 text-sm text-ink-soft">{scelto?.nome || t("Scegli il diving destinatario")}</p>
+            <p className="mt-1 text-sm text-ink-soft">{viaggio ? t("Per questo viaggio · {nome}", { nome: viaggio.clubNome }) : scelto?.nome || t("Scegli il diving destinatario")}</p>
           </div>
           <div className="grid h-16 w-16 shrink-0 rotate-6 place-items-center rounded-full border-2 border-danger text-center text-xs font-medium leading-tight text-danger">
             L. 70
@@ -517,7 +666,7 @@ export function SchedaEditor({
           </div>
         </header>
         <p className={`no-print border-b border-rule px-5 py-3 text-sm text-ink-soft ${modifica ? "hidden" : ""}`}>
-          {t("Passo {n} di {totale}", { n: passo + 1, totale: sezioni.length + 1 })}
+          {t("Passo {n} di {totale}", { n: viaggio ? passo : passo + 1, totale: viaggio ? sezioni.length : sezioni.length + 1 })}
           {" · "}
           {t(titoloPasso)}
           {vuotiOra.length ? ` · ${vuotiOra.length === 1 ? t("manca 1 campo") : t("mancano {n} campi", { n: vuotiOra.length })}` : ""}
@@ -701,7 +850,7 @@ export function SchedaEditor({
             {t("Avanti")}
           </button>
         )}
-        {!modifica && passo > 0 ? (
+        {!modifica && passo > (viaggio ? 1 : 0) ? (
           <button type="button" onClick={() => setPasso((current) => current - 1)} className="min-h-11 rounded-full border border-line px-4 text-sm">
             {t("Indietro")}
           </button>
@@ -716,7 +865,7 @@ export function SchedaEditor({
           {t("Salva bozza")}
         </button>
         ) : null}
-        {existing && !modifica ? (
+        {existing && !modifica && !viaggio ? (
           <button
             type="button"
             disabled={busy}
@@ -747,9 +896,9 @@ export function SchedaEditor({
       {confermaInvio ? (
         <div className="no-print fixed inset-0 z-50 grid place-items-end bg-ink/70 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:place-items-center" role="dialog" aria-modal="true">
           <div className="w-full max-w-sm rounded-card border border-line bg-abyss p-5">
-            <h2 className="text-2xl">{t("Confermi il diving?")}</h2>
-            <p className="mt-2 text-sm text-mist">{t("La scheda viene inviata solo a questa scuola.")}</p>
-            <p className="mt-3 text-xl">{scelto?.nome}</p>
+            <h2 className="text-2xl">{viaggio ? t("Invii il modulo per questo viaggio?") : t("Confermi il diving?")}</h2>
+            <p className="mt-2 text-sm text-mist">{viaggio ? t("Arriva solo al club che organizza, per questo viaggio.") : t("La scheda viene inviata solo a questa scuola.")}</p>
+            <p className="mt-3 text-xl">{viaggio ? viaggio.clubNome : scelto?.nome}</p>
             <button
               type="button"
               disabled={busy}
@@ -759,7 +908,7 @@ export function SchedaEditor({
                 void persist("inviato");
               }}
             >
-              {t("Invia a {nome}", { nome: scelto?.nome ?? "" })}
+              {viaggio ? t("Invia moduli viaggio") : t("Invia a {nome}", { nome: scelto?.nome ?? "" })}
             </button>
             <button type="button" className="mt-2 min-h-11 w-full rounded-full border border-line text-sm" onClick={() => setConfermaInvio(false)}>
               {t("Annulla")}
@@ -853,7 +1002,7 @@ function FoglioScheda({ form, dati, stampa }: { form: FormDef; dati: Record<stri
             <div key={field.key}>
               <dt className="text-xs uppercase tracking-wide text-ink-soft">{t(field.label)}</dt>
               <dd className="mt-1 text-sm">
-                {field.type === "periodo" ? testoPeriodo(dati, t) : value.startsWith("data:image") ? <img src={value} alt="" className={`firma-ink bg-white object-contain ${field.key === "foto_certificato" ? "max-h-96 w-full" : "h-24"}`} /> : valoreCampo(field, value, t)}
+                {field.type === "periodo" ? testoPeriodo(dati, t) : value.startsWith("data:image") ? <img src={value} alt="" className={`firma-ink bg-white object-contain ${field.key === "foto_certificato" || field.key === "foto_brevetto" ? "max-h-96 w-full" : "h-24"}`} /> : valoreCampo(field, value, t)}
                 {value.startsWith("data:image") && dati[`${field.key}_nome`] ? <span className="mt-1 block text-xs text-ink-soft">{dati[`${field.key}_nome`]}</span> : null}
               </dd>
             </div>

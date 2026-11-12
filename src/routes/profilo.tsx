@@ -21,7 +21,12 @@ import { messaggioErrore, useT } from "@/lib/i18n";
 import { FINE_PROVA } from "@/lib/abbonamento";
 import { SCARICO_DATA, SCARICO_TITOLO, SCARICO_VERSIONE } from "@/lib/scarico-pianificatore";
 
-export const Route = createFileRoute("/profilo")({ component: Page });
+export const Route = createFileRoute("/profilo")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    scuola: search.scuola === true || search.scuola === "1" || search.scuola === 1,
+  }),
+  component: Page,
+});
 
 function Page() {
   return (
@@ -34,6 +39,7 @@ function Page() {
 function ProfilePage() {
   const t = useT();
   const frame = useFondale();
+  const search = Route.useSearch();
   const profile = frame.profile;
   const [nome, setNome] = useState(profile?.nome ?? "");
   const [cognome, setCognome] = useState(profile?.cognome ?? "");
@@ -92,6 +98,94 @@ function ProfilePage() {
 
   if (!profile) return null;
 
+  const sezioneScuola = owner ? (
+    frame.abbonamento.scuolaAperta ? (
+      <>
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(
+              () =>
+                updateClub({
+                  data: {
+                    nome: clubNome,
+                    sede,
+                    codiceFiscale: cf,
+                    email,
+                    telefono: telClub,
+                    codiceStaff: codice,
+                    citta: cittaClub,
+                    provincia: provinciaClub,
+                    sito: sitoClub,
+                  },
+                }),
+              "Dati della scuola aggiornati.",
+            );
+          }}
+        >
+          <p className="text-sm text-mist">{t("Logo, codice da dare allo staff e guide.")}</p>
+          <LogoField />
+          <Input label="Nome" value={clubNome} onChange={setClubNome} />
+          <Input label="Sede" value={sede} onChange={setSede} />
+          <Pair>
+            <Input label="Città" value={cittaClub} onChange={setCittaClub} />
+            <Input label="Provincia o regione" value={provinciaClub} onChange={setProvinciaClub} hint="Compare in Cerca Diving." />
+          </Pair>
+          <Input label="Sito web" value={sitoClub} onChange={setSitoClub} />
+          <Pair>
+            <Input label="Codice fiscale" value={cf} onChange={setCf} />
+            <Input label="Telefono" value={telClub} onChange={setTelClub} />
+          </Pair>
+          <Input label="Email" value={email} onChange={setEmail} />
+          <Input label="Codice staff" value={codice} onChange={setCodice} hint="L'unico codice da dare a istruttori e guide." />
+          <p className="text-sm text-mist">{t("Account Pro staff: {usati}/{tetto}", { usati: frame.club.postiStaff, tetto: frame.club.postiTetto })}</p>
+          <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "posto" }} className="inline-flex min-h-11 items-center text-sm text-brass">
+            {t("Aggiungi posto Pro — 8 €")}
+          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={busy} className="min-h-11 rounded-full border border-line px-5 text-sm disabled:opacity-60">
+              {t("Salva scuola")}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium"
+              onClick={() => {
+                const text = codice.trim();
+                if (!text) return;
+                void navigator.clipboard.writeText(text);
+                setNote("Codice copiato.");
+              }}
+            >
+              {t("Copia codice")}
+            </button>
+          </div>
+        </form>
+        {frame.club.mezzoNautico ? <Imbarcazioni /> : null}
+        {frame.club.mezzoNautico ? <StaffScuola /> : null}
+        {!frame.club.mezzoNautico ? <PassaggioMezzo richiesto={frame.club.mezzoRichiesto} onDone={() => frame.refresh()} /> : null}
+        <SecondoTitolare />
+        <ChiaveScuola hasChiave={frame.club.hasChiave} onDone={() => frame.refresh()} />
+        <PassaggioScuola accetta={frame.club.accettaModuli} onDone={() => frame.refresh()} />
+      </>
+    ) : (
+      <p className="mt-4 text-sm text-mist">
+        {t("L'area della scuola, le anagrafiche dei moduli ricevuti e la gestione si aprono solo se il diving è in prova valida oppure attivo. Il profilo resta consultabile.")}
+      </p>
+    )
+  ) : null;
+
+  if (search.scuola) {
+    return (
+      <div className="mx-auto max-w-xl">
+        <Link to="/" className="text-sm text-lagoon">{t("Home")}</Link>
+        <h1 className="mt-2 text-3xl leading-none">{t("Scuola")}</h1>
+        {sezioneScuola}
+        {note ? <p className="mt-4 text-sm text-brass">{t(note)}</p> : null}
+      </div>
+    );
+  }
+
   async function run(task: () => Promise<unknown>, ok: string) {
     setBusy(true);
     setNote(null);
@@ -116,8 +210,10 @@ function ProfilePage() {
       ) : null}
       <LinguaAccount />
       {frame.abbonamento.riga ? <p className="mt-3 text-sm text-brass">{t(frame.abbonamento.riga)}</p> : null}
+      <details className="porta">
+        <summary>{t("I tuoi dati")}</summary>
       <form
-        className="mt-6 space-y-3 rounded-card border border-line bg-surface p-4"
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           void run(async () => {
@@ -199,10 +295,11 @@ function ProfilePage() {
           {t("Completa i tuoi dati")}
         </Link>
       ) : null}
+      </details>
       {note ? <p className="mt-4 text-sm text-brass">{t(note)}</p> : null}
 
-      <details className="mt-8 border-t border-line pt-4">
-        <summary className="min-h-11 cursor-pointer text-2xl">{t("Impostazioni")}</summary>
+      <details className="porta">
+        <summary>{t("Impostazioni")}</summary>
         <TemaChiaro />
         <NotificheProfilo />
         <PopupCuriosita />
@@ -251,86 +348,6 @@ function ProfilePage() {
         </details>
       ) : null}
 
-      {owner ? (
-        <details className="mt-10 border-t border-line pt-6">
-          <summary className="min-h-11 cursor-pointer text-2xl">{t("Scuola")}</summary>
-          {frame.abbonamento.scuolaAperta ? (
-          <>
-          <form
-            className="mt-4 space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(
-                () =>
-                  updateClub({
-                    data: {
-                      nome: clubNome,
-                      sede,
-                      codiceFiscale: cf,
-                      email,
-                      telefono: telClub,
-                      codiceStaff: codice,
-                      citta: cittaClub,
-                      provincia: provinciaClub,
-                      sito: sitoClub,
-                    },
-                  }),
-                "Dati della scuola aggiornati.",
-              );
-            }}
-          >
-            <p className="text-sm text-mist">{t("Logo, codice da dare allo staff e guide.")}</p>
-            <LogoField />
-            <Input label="Nome" value={clubNome} onChange={setClubNome} />
-            <Input label="Sede" value={sede} onChange={setSede} />
-            <Pair>
-              <Input label="Città" value={cittaClub} onChange={setCittaClub} />
-              <Input label="Provincia o regione" value={provinciaClub} onChange={setProvinciaClub} hint="Compare in Cerca Diving." />
-            </Pair>
-            <Input label="Sito web" value={sitoClub} onChange={setSitoClub} />
-            <Pair>
-              <Input label="Codice fiscale" value={cf} onChange={setCf} />
-              <Input label="Telefono" value={telClub} onChange={setTelClub} />
-            </Pair>
-            <Input label="Email" value={email} onChange={setEmail} />
-            <Input label="Codice staff" value={codice} onChange={setCodice} hint="L'unico codice da dare a istruttori e guide." />
-            <p className="text-sm text-mist">{t("Account Pro staff: {usati}/{tetto}", { usati: frame.club.postiStaff, tetto: frame.club.postiTetto })}</p>
-            <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "posto" }} className="inline-flex min-h-11 items-center text-sm text-brass">
-              {t("Aggiungi posto Pro — 8 €")}
-            </Link>
-            <div className="flex flex-wrap gap-2">
-              <button type="submit" disabled={busy} className="min-h-11 rounded-full border border-line px-5 text-sm disabled:opacity-60">
-                {t("Salva scuola")}
-              </button>
-              <button
-                type="button"
-                className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium"
-                onClick={() => {
-                  const text = codice.trim();
-                  if (!text) return;
-                  void navigator.clipboard.writeText(text);
-                  setNote("Codice copiato.");
-                }}
-              >
-                {t("Copia codice")}
-              </button>
-            </div>
-          </form>
-          {frame.club.mezzoNautico ? <Imbarcazioni /> : null}
-          {frame.club.mezzoNautico ? <StaffScuola /> : null}
-          {!frame.club.mezzoNautico ? <PassaggioMezzo richiesto={frame.club.mezzoRichiesto} onDone={() => frame.refresh()} /> : null}
-          <SecondoTitolare />
-          <ChiaveScuola hasChiave={frame.club.hasChiave} onDone={() => frame.refresh()} />
-          <PassaggioScuola accetta={frame.club.accettaModuli} onDone={() => frame.refresh()} />
-          </>
-          ) : (
-            <p className="mt-4 text-sm text-mist">
-              {t("L'area della scuola, le anagrafiche dei moduli ricevuti e la gestione si aprono solo se il diving è in prova valida oppure attivo. Il profilo resta consultabile.")}
-            </p>
-          )}
-        </details>
-      ) : null}
-
       <DatiPersonali />
 
       {frame.hasInstructor && !frame.owner && !frame.platform ? (
@@ -373,6 +390,12 @@ function ProfilePage() {
         </button>
       ) : null}
       </details>
+      {owner ? (
+        <details className="porta">
+          <summary>{t("Scuola")}</summary>
+          {sezioneScuola}
+        </details>
+      ) : null}
       {frame.platform && !frame.comeCliente && frame.vista !== "club" ? <ContiIscritti /> : null}
       <section className="mt-10 border-t border-line pt-4">
         <h2 className="text-sm text-mist">{t("Informazioni")}</h2>

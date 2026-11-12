@@ -29,6 +29,7 @@ import {
 import { formatDay, mesiCompiuti } from "@/lib/format";
 import { scriviPdfElenco, scriviPdfFoglio } from "@/lib/foglio-pdf";
 import { messaggioErrore, linguaAttuale, useT, type Traduci } from "@/lib/i18n";
+import { accettaViaggio, listaViaggi, type ViaggioBreve } from "@/lib/viaggi.functions";
 
 export const Route = createFileRoute("/uscite")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -62,7 +63,8 @@ function Elenco() {
   const frame = useFondale();
   const t = useT();
   const riva = !frame.club.mezzoNautico;
-  const [rows, setRows] = useState<{ id: number; data: string; localita: string; imbarcazione: string; guidaNome: string; persone: number; fase: "prima" | "dopo" | "chiusa" }[] | null>(null);
+  const [rows, setRows] = useState<{ id: number; data: string; localita: string; imbarcazione: string; guidaNome: string; persone: number; fase: "prima" | "dopo" | "chiusa"; viaggioId: number | null }[] | null>(null);
+  const [arrivi, setArrivi] = useState<ViaggioBreve[]>([]);
   const [guide, setGuide] = useState<GuidaUscita[] | null>(null);
   const [barche, setBarche] = useState<{ id: number; nome: string }[] | null>(null);
   const [data, setData] = useState(frame.oggi);
@@ -89,6 +91,13 @@ function Elenco() {
       })
       .catch(() => {
         if (live) setRows([]);
+      });
+    listaViaggi()
+      .then((items) => {
+        if (live) setArrivi(items.filter((item) => item.mio === "ospito" && item.stato === "inviato"));
+      })
+      .catch(() => {
+        if (live) setArrivi([]);
       });
     if (riva) return () => {
       live = false;
@@ -187,6 +196,33 @@ function Elenco() {
         Home
       </Link>
       <h1 className="mt-2 text-3xl leading-none">{riva ? t("Registro attività") : t("Registro")}</h1>
+      {arrivi.map((viaggio) => (
+        <div key={viaggio.id} className="mt-4 rounded-2xl border border-brass bg-deep px-4 py-3">
+          <p className="text-xs uppercase tracking-wide text-brass">{t("Viaggio in arrivo")}</p>
+          <p className="mt-1 text-sm font-medium">{viaggio.titolo}</p>
+          <p className="mt-1 text-sm text-mist">{viaggio.club} · {formatDay(viaggio.dal)} – {formatDay(viaggio.al)}</p>
+          <p className="mt-2 text-sm">{t("Non è ancora un'uscita. Accetta per crearla.")}</p>
+          <button
+            type="button"
+            disabled={busy}
+            className="mt-3 min-h-11 rounded-full bg-brass px-4 text-sm font-medium text-ink disabled:opacity-60"
+            onClick={() => {
+              setBusy(true);
+              setError(null);
+              void accettaViaggio({ data: { id: viaggio.id } })
+                .then(() => listUscite())
+                .then((items) => {
+                  setRows(items);
+                  setArrivi((current) => current.filter((item) => item.id !== viaggio.id));
+                })
+                .catch((reason: unknown) => setError(messaggioErrore(reason, "Non riesco ad accettare.")))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {t("Accetta e crea le uscite")}
+          </button>
+        </div>
+      ))}
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="min-h-11 rounded-full border border-line px-4 text-sm" aria-expanded={calendario} onClick={() => setCalendario((aperto) => !aperto)}>
           {t("Data")}{periodo ? ` · ${periodo.da === periodo.a ? formatDay(periodo.da) : `${formatDay(periodo.da)} – ${formatDay(periodo.a)}`}` : ""}
@@ -337,7 +373,7 @@ function Elenco() {
                     {row.fase === "chiusa" && mesiCompiuti(row.data, frame.oggi) ? ` · ${t("Sei mesi compiuti")}` : ""}
                   </p>
                 </Link>
-                {apertaUscita ? (
+                {apertaUscita && !(row.viaggioId && !mesiCompiuti(row.data, frame.oggi)) ? (
                   <button
                     type="button"
                     disabled={cancellando === row.id}
@@ -354,6 +390,8 @@ function Elenco() {
                   >
                     {cancellando === row.id ? t("Elimino…") : t("Elimina foglio")}
                   </button>
+                ) : apertaUscita && row.viaggioId ? (
+                  <p className="border-t border-brass px-4 py-3 text-xs text-brass">{t("Il registro di un viaggio resta per sei mesi.")}</p>
                 ) : null}
               </li>
             );
@@ -915,7 +953,7 @@ function SchedaUscita({ id }: { id: number }) {
             {t("Stampa il PDF del giorno")}
           </button>
         ) : null}
-        {chiusaDopo && frame.owner ? (
+        {chiusaDopo && frame.owner && !(uscita.viaggioId && !mesiCompiuti(uscita.data, frame.oggi)) ? (
           <button
             type="button"
             className="no-print mt-3 min-h-12 w-full rounded-full border border-danger px-4 text-sm font-medium text-danger"

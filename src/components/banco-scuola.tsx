@@ -1,186 +1,194 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { Archive, BarChart3, Calendar, CalendarClock, ClipboardList, Inbox } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { BarChart3, Calendar, ClipboardList, Users } from "lucide-react";
 import { useFondale } from "@/components/app-frame";
-import { PulsanteSoci } from "@/components/area-soci";
 import { ScuolaChiusa } from "@/components/lucchetto";
-import { listaPersoneScuola, listSubmissions, listUscite, contaModuliDaLeggere, statoDocumentiStaff, reportControlli, type PersonaScuola, type ReportControlli, type StatoStaffHome, type SubmissionListItem } from "@/lib/fondale.functions";
-import { formatDay, oggiRoma, problemiDocumenti, scadenzaStato } from "@/lib/format";
+import { listSubmissions, listUscite, contaModuliDaLeggere, reportControlli, listaSoci, type ReportControlli } from "@/lib/fondale.functions";
+import { formatDay, scadenzaStato } from "@/lib/format";
 import { entroUnMese } from "@/lib/prezzi";
 import { scriviPdfReport } from "@/lib/foglio-pdf";
 import { messaggioErrore, useT } from "@/lib/i18n";
+import { ConvalideInAttesa } from "@/components/convalida-log";
+import { accettaViaggio, listaViaggi, type ViaggioBreve } from "@/lib/viaggi.functions";
 
 export function BancoScuola() {
   const frame = useFondale();
   const t = useT();
-  const [rows, setRows] = useState<SubmissionListItem[] | null>(null);
-  const [staff, setStaff] = useState<PersonaScuola[] | null>(null);
-  const [stati, setStati] = useState<StatoStaffHome[] | null>(null);
+  const navigate = useNavigate();
   const [daLeggereN, setDaLeggereN] = useState<number | null>(null);
-  const [oggi, setOggi] = useState(oggiRoma);
+  const [scadenze, setScadenze] = useState(0);
+  const [aperte, setAperte] = useState<{ id: number; data: string; localita: string; imbarcazione: string }[]>([]);
+  const [arrivi, setArrivi] = useState<ViaggioBreve[]>([]);
+  const [inAttesa, setInAttesa] = useState(0);
+  const [scuolaAperta, setScuolaAperta] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  function carica() {
+    return Promise.all([
+      contaModuliDaLeggere(),
+      listSubmissions({ data: { sort: "created" } }),
+      listUscite(),
+      listaViaggi(),
+      listaSoci(),
+    ]).then(([daLeggere, schede, uscite, viaggi, soci]) => {
+      const inScadenza = schede.filter((row) => {
+        if (row.status !== "inviato" || !row.scadenza) return false;
+        const stato = scadenzaStato(row.scadenza, frame.oggi);
+        return stato === "scaduta" || stato === "in-scadenza";
+      });
+      setDaLeggereN(daLeggere);
+      setScadenze(inScadenza.length);
+      setAperte(uscite.filter((item) => item.fase !== "chiusa").map((item) => ({ id: item.id, data: item.data, localita: item.localita, imbarcazione: item.imbarcazione })));
+      setArrivi(viaggi.filter((item) => item.mio === "ospito" && item.stato === "inviato"));
+      setInAttesa(soci.inAttesa.length);
+    });
+  }
 
   useEffect(() => {
     if (!frame.abbonamento.scuolaAperta) return;
     let live = true;
-    const load = () => {
-      Promise.all([
-        listSubmissions({ data: { sort: "created" } }),
-        listaPersoneScuola(),
-        contaModuliDaLeggere(),
-        statoDocumentiStaff(),
-      ])
-        .then(([schede, guides, daLeggere, documenti]) => {
-          if (!live) return;
-          setRows(schede);
-          setStaff(guides);
-          setDaLeggereN(daLeggere);
-          setStati(documenti);
-        })
-        .catch(() => {
-          if (!live) return;
-          setRows([]);
-          setStaff([]);
-          setDaLeggereN(0);
-          setStati([]);
-        });
-    };
-    load();
-    const clock = window.setInterval(() => setOggi(oggiRoma()), 15000);
-    const documenti = window.setInterval(() => {
-      statoDocumentiStaff()
-        .then((next) => {
-          if (live) setStati(next);
-        })
-        .catch(() => undefined);
-    }, 20000);
-    const onShow = () => {
-      if (document.visibilityState === "visible") {
-        setOggi(oggiRoma());
-        load();
-      }
-    };
-    window.addEventListener("focus", onShow);
-    document.addEventListener("visibilitychange", onShow);
+    carica().catch(() => {
+      if (!live) return;
+      setDaLeggereN(0);
+    });
     return () => {
       live = false;
-      window.clearInterval(clock);
-      window.clearInterval(documenti);
-      window.removeEventListener("focus", onShow);
-      document.removeEventListener("visibilitychange", onShow);
     };
-  }, [frame.profile?.userId, frame.abbonamento.scuolaAperta, frame.owner]);
+  }, [frame.profile?.userId, frame.abbonamento.scuolaAperta, frame.oggi]);
 
   if (!frame.abbonamento.scuolaAperta) return <ScuolaChiusa />;
 
-  const arrivati = (rows ?? []).filter((row) => row.status === "inviato");
+  const uscita = aperte[0];
+  const viaggio = arrivi[0];
+  const moduli = daLeggereN ?? 0;
+  const registroNome = frame.club.mezzoNautico ? "Registro" : "Registro attività";
+  const registroN = aperte.length - (uscita ? 1 : 0) + arrivi.length - (!uscita && viaggio ? 1 : 0);
+  const moduliN = (!uscita && !viaggio && moduli > 0 ? 0 : moduli) + scadenze - (!uscita && !viaggio && moduli === 0 && scadenze > 0 ? 1 : 0);
 
-  const scadenze = arrivati.filter((row) => {
-    if (!row.scadenza) return false;
-    const state = scadenzaStato(row.scadenza, frame.oggi);
-    return state === "scaduta" || state === "in-scadenza";
-  });
+  let kicker = "Da fare adesso";
+  let titolo = "";
+  let dettaglio = "";
+  let azione = "Apri";
+  let vai: () => void = () => {
+    void navigate({ to: "/uscite", search: { id: undefined } });
+  };
+  if (uscita) {
+    titolo = t("Chiudi il registro");
+    dettaglio = `${formatDay(uscita.data)} · ${frame.club.mezzoNautico && uscita.imbarcazione ? `${uscita.imbarcazione} · ` : ""}${uscita.localita || t("Senza località")}`;
+    vai = () => {
+      void navigate({ to: "/uscite", search: { id: uscita.id } });
+    };
+  } else if (viaggio) {
+    titolo = t("È arrivato un viaggio");
+    dettaglio = `${viaggio.titolo} · ${viaggio.club}`;
+    azione = "Accetta";
+    vai = () => {
+      if (busy) return;
+      setBusy(true);
+      setErrore(null);
+      void accettaViaggio({ data: { id: viaggio.id } })
+        .then(() => carica())
+        .catch((reason: unknown) => setErrore(messaggioErrore(reason, "Non riesco ad accettare.")))
+        .finally(() => setBusy(false));
+    };
+  } else if (moduli > 0) {
+    titolo = moduli === 1 ? t("1 modulo da leggere") : t("{n} moduli da leggere", { n: moduli });
+    dettaglio = t("Sono nell'archivio.");
+    azione = "Leggi";
+    vai = () => navigate({ to: "/archivio" });
+  } else if (scadenze > 0) {
+    titolo = scadenze === 1 ? t("1 documento in scadenza") : t("{n} documenti in scadenza", { n: scadenze });
+    dettaglio = t("Medico, assicurazione o attrezzatura.");
+    vai = () => navigate({ to: "/archivio" });
+  } else {
+    kicker = "Oggi";
+    titolo = t("Niente in sospeso");
+    dettaglio = t("Puoi aprire l'uscita di oggi.");
+    azione = "Apri l'uscita di oggi";
+  }
 
   return (
     <div className="mx-auto max-w-3xl">
-      {frame.owner && entroUnMese(frame.oggi, frame.club.attivoFino) ? (
-        <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "struttura" }} className="mt-4 block rounded-2xl border border-brass bg-brass/15 px-4 py-3 text-sm font-medium text-brass">
-          {t("Rinnova piano")}
+      <ConvalideInAttesa />
+      <section className="rounded-3xl border border-brass bg-deep px-4 py-4">
+        <p className="text-xs uppercase tracking-wide text-brass">{t(kicker)}</p>
+        <h2 className="mt-2 text-2xl leading-none">{titolo}</h2>
+        <p className="mt-2 text-sm text-mist">{dettaglio}</p>
+        {errore ? <p className="mt-2 text-sm text-brass">{errore}</p> : null}
+        <button type="button" disabled={busy} className="mt-4 min-h-12 w-full rounded-full bg-brass px-4 text-sm font-medium text-ink disabled:opacity-60" onClick={vai}>
+          {busy ? t("Accetto…") : t(azione)}
+        </button>
+      </section>
+      <div className="mt-4 grid gap-3">
+        <Link to="/uscite" search={{ id: undefined }} className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
+          <Calendar className="size-5 shrink-0 text-lagoon" aria-hidden />
+          <span className="flex-1 text-base font-medium">{t(registroNome)}</span>
+          {registroN > 0 ? <span className="text-sm text-brass">{registroN}</span> : null}
         </Link>
-      ) : null}
-      {frame.owner && !frame.club.hasChiave ? (
-        <p className="mt-4 text-sm text-mist">{t("La chiave della scuola si crea in Profilo, nelle impostazioni. Senza, i moduli sanitari non si aprono.")}</p>
-      ) : null}
-      <UscitaAperta />
-      <Link to="/uscite" search={{ id: undefined }} className="mt-5 flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-tide text-base font-medium text-white">
-        <Calendar className="size-5 shrink-0" aria-hidden />
-        {t(frame.club.mezzoNautico ? "Registro del giorno" : "Registro attività")}
-      </Link>
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <Link to="/grafici" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-3 text-sm font-medium text-foam">
+        <Link to="/soci" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
+          <Users className="size-5 shrink-0 text-lagoon" aria-hidden />
+          <span className="flex-1 text-base font-medium">{t("Persone")}</span>
+          {inAttesa > 0 ? <span className="text-sm text-brass">{inAttesa}</span> : null}
+        </Link>
+        <Link to={moduli > 0 || scadenze > 0 ? "/archivio" : "/moduli"} className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
+          <ClipboardList className="size-5 shrink-0 text-lagoon" aria-hidden />
+          <span className="flex-1 text-base font-medium">{t("Moduli")}</span>
+          {moduliN > 0 ? <span className="text-sm text-brass">{moduliN}</span> : null}
+        </Link>
+        <Link to="/grafici" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
           <BarChart3 className="size-5 shrink-0 text-lagoon" aria-hidden />
-          {t("Statistiche")}
-        </Link>
-        <Link to="/archivio" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-3 text-sm font-medium text-foam">
-          <Archive className="size-5 shrink-0 text-lagoon" aria-hidden />
-          {t("Archivio moduli")}
+          <span className="flex-1 text-base font-medium">{t("Statistiche")}</span>
         </Link>
       </div>
-      <PulsanteSoci />
-      <ReportControlli compatto />
-      <ModuliDaLeggere n={daLeggereN} compatto />
-      <section className="mt-4 rounded-2xl border border-line bg-deep px-3 py-3">
-        <h2 className="flex items-center gap-3 text-sm font-medium text-foam">
-          <CalendarClock className="size-5 shrink-0 text-lagoon" aria-hidden />
-          {t("Documenti in scadenza")}
-        </h2>
-        {rows && scadenze.length === 0 ? <p className="mt-2 pl-8 text-sm text-foam">{t("Nessuna scadenza vicina.")}</p> : null}
-        {scadenze.length > 0 ? (
-          <ul className="mt-2 space-y-1">
-            {scadenze.map((row) => {
-              const attrezzatura = row.formKey === "registro-attrezzatura";
-              const stato = scadenzaStato(row.scadenza, frame.oggi);
-              const nome = attrezzatura ? [row.authorName, row.subjectName].filter(Boolean).join(" · ") : row.subjectName;
-              return (
-                <li key={row.id}>
-                  <Link to="/scheda/$id" params={{ id: String(row.id) }} className="flex min-h-10 items-center justify-between gap-3 rounded-xl px-1">
-                    <span className="flex min-w-0 items-center gap-3 text-sm font-medium text-foam">
-                      <CalendarClock className="size-4 shrink-0 text-brass" aria-hidden />
-                      <span>
-                        {nome}
-                        {attrezzatura ? <span className="mt-0.5 block text-xs text-brass">{stato === "scaduta" ? t("Attrezzatura scaduta") : t("Attrezzatura in scadenza")}</span> : null}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-sm font-medium text-foam">{row.scadenza ? formatDay(row.scadenza) : ""}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-      </section>
-      <section className="mt-6">
-        <h2 className="text-sm font-medium">{t("Staff")}</h2>
-        <ul className="mt-3 grid gap-3">
-          {(staff ?? []).map((person) => {
-            const chiama = person.telefono.replace(/[^\d+]/g, "");
-            const scheda = stati?.find((item) => item.userId === person.userId);
-            const problemi = scheda
-              ? problemiDocumenti(
-                  { medico: scheda.medico, assicurazione: scheda.assicurazione, brevetto: scheda.brevetto },
-                  oggi,
-                )
-              : null;
-            return (
-              <li key={person.userId} className="rounded-2xl border border-line bg-deep px-4 py-3">
-                <p className="text-sm font-medium">
-                  <span>
-                    {person.cognome} {person.nome}
-                  </span>
-                  {problemi ? (
-                    <span className={`ml-1.5 ${problemi.length ? "" : "text-[#1b7f3a]"}`} aria-hidden>
-                      {problemi.length ? "❌" : "✔️"}
-                    </span>
-                  ) : null}
-                  {person.titolare ? <span className="ml-2 text-xs font-normal text-mist">{t("Titolare")}</span> : null}
-                </p>
-                {problemi && problemi.length > 0 ? (
-                  <ul className="mt-1 space-y-0.5">
-                    {problemi.map((voce) => (
-                      <li key={voce} className="text-xs text-brass">{t(voce)}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                {chiama ? (
-                  <a href={`tel:${chiama}`} className="mt-1 block text-sm text-lagoon">{person.telefono}</a>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-        {staff && staff.length === 0 ? <p className="mt-3 text-sm text-mist">{t("Nessuno staff, per ora. Il codice si dà dal Profilo.")}</p> : null}
-      </section>
+      {frame.owner ? (
+        <section className="mt-4">
+          <button type="button" className="flex min-h-14 w-full items-center rounded-2xl border border-line px-4 text-left text-base font-medium" onClick={() => setScuolaAperta((value) => !value)}>
+            <span className="flex-1">{t("Scuola")}</span>
+            {!frame.club.hasChiave || entroUnMese(frame.oggi, frame.club.attivoFino) ? <span className="text-sm text-brass">{t("Da vedere")}</span> : null}
+          </button>
+          {scuolaAperta ? (
+            <div className="mt-3 grid gap-3">
+              {entroUnMese(frame.oggi, frame.club.attivoFino) ? (
+                <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "struttura" }} className="block rounded-2xl border border-brass bg-brass/15 px-4 py-3 text-sm font-medium text-brass">
+                  <span className="block">{t("Rinnova piano")}</span>
+                  <span className="mt-1 block text-xs font-normal">{rigaPiano(frame.club, frame.oggi, t)}</span>
+                </Link>
+              ) : (
+                <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: "struttura" }} className="block rounded-2xl border border-line bg-deep px-4 py-3 text-sm">
+                  <span className="block">{t("Piano e rinnovo")}</span>
+                  <span className="mt-1 block text-xs text-mist">{rigaPiano(frame.club, frame.oggi, t)}</span>
+                </Link>
+              )}
+              <Link to="/profilo" search={{ scuola: true }} className="block rounded-2xl border border-line bg-deep px-4 py-3 text-sm">
+                {t("Barche, codici e chiave")}
+                {!frame.club.hasChiave ? <span className="mt-1 block text-xs text-brass">{t("Senza la chiave, i moduli sanitari non si aprono.")}</span> : null}
+              </Link>
+              <ReportControlli compatto />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
+}
+
+function rigaPiano(
+  club: { piano: "" | "trial" | "active" | "sospeso"; provaFino: string; attivoFino: string; mezzoNautico: boolean },
+  oggi: string,
+  t: (testo: string, valori?: Record<string, string | number>) => string,
+): string {
+  if (club.piano === "sospeso") return t("Piano sospeso");
+  if (club.piano !== "trial" && club.piano !== "active") return t("Nessun piano attivo");
+  const fino = (club.piano === "trial" ? club.provaFino : club.attivoFino).slice(0, 10);
+  const scaduto = Boolean(fino) && fino < oggi;
+  if (club.piano === "trial") {
+    return fino ? t(scaduto ? "Prova scaduta il {data}" : "Prova, fino al {data}", { data: formatDay(fino) }) : t("Prova");
+  }
+  const diving = club.mezzoNautico;
+  if (!fino) return t(diving ? "Diving, attivo" : "Scuola, attivo");
+  if (scaduto) return t(diving ? "Diving scaduto il {data}" : "Scuola scaduta il {data}", { data: formatDay(fino) });
+  return t(diving ? "Diving, fino al {data}" : "Scuola, fino al {data}", { data: formatDay(fino) });
 }
 
 function ReportControlli({ compatto = false }: { compatto?: boolean }) {
@@ -322,70 +330,4 @@ function statoReport(
   if (codice === "assente") return t("mancante");
   if (codice === "scaduto") return t("scaduto");
   return t("valido");
-}
-
-function ModuliDaLeggere({ n, compatto = false }: { n: number | null; compatto?: boolean }) {
-  const t = useT();
-  if (n === null) return null;
-  if (n === 0) {
-    return (
-      <section className={`mt-4 flex items-center rounded-2xl border border-line bg-deep ${compatto ? "min-h-11 gap-3 px-3 py-2" : "px-4 py-4"}`}>
-        {compatto ? <Inbox className="size-5 shrink-0 text-lagoon" aria-hidden /> : null}
-        <p className={compatto ? "text-sm font-medium text-foam" : "text-sm text-mist"}>{t("Nessun modulo in attesa")}</p>
-      </section>
-    );
-  }
-  return (
-    <Link to="/archivio" className={`mt-4 block rounded-2xl border border-brass bg-amber ${compatto ? "px-3 py-3" : "px-4 py-4"}`}>
-      {compatto ? (
-        <span className="flex items-center gap-3">
-          <Inbox className="size-5 shrink-0 text-brass" aria-hidden />
-          <span>
-            <span className="block font-display text-3xl leading-none text-brass">{n}</span>
-            <span className="mt-1 block text-sm font-medium text-brass">{n === 1 ? t("1 modulo da leggere") : t("{n} moduli da leggere", { n })}</span>
-          </span>
-        </span>
-      ) : (
-        <>
-          <p className="font-display text-5xl leading-none text-brass">{n}</p>
-          <p className="mt-2 text-sm text-brass">{n === 1 ? t("1 modulo da leggere") : t("{n} moduli da leggere", { n })}</p>
-        </>
-      )}
-    </Link>
-  );
-}
-
-function UscitaAperta() {
-  const t = useT();
-  const frame = useFondale();
-  const [aperte, setAperte] = useState<{ id: number; data: string; localita: string; imbarcazione: string; fase: "prima" | "dopo" | "chiusa" }[]>([]);
-
-  useEffect(() => {
-    let live = true;
-    listUscite()
-      .then((items) => {
-        if (live) setAperte(items.filter((item) => item.fase !== "chiusa"));
-      })
-      .catch(() => {
-        if (live) setAperte([]);
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  const row = aperte[0];
-  if (!row) return null;
-  const stato = row.fase === "dopo" ? t("In acqua, da chiudere") : t("Verifica brevetti aperta");
-  return (
-    <Link to="/uscite" search={{ id: row.id }} className="mt-4 block rounded-card border border-brass bg-amber px-4 py-3">
-      <p className="text-sm text-brass">
-        {formatDay(row.data)} · {frame.club.mezzoNautico && row.imbarcazione ? `${row.imbarcazione} · ` : ""}{row.localita || t("Senza località")} · {t("Da chiudere")}
-      </p>
-      <p className="mt-1 text-xs text-brass">
-        {stato}
-        {aperte.length > 1 ? ` · ${t("e altre {n}", { n: aperte.length - 1 })}` : ""}
-      </p>
-    </Link>
-  );
 }

@@ -518,7 +518,7 @@ function Shell({ children }: { children: ReactNode }) {
         <RigaNome conto={conto} path={path} />
         <AvvisoRinnovo />
         <PrimaVolta />
-        <main className="px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:px-8 md:pb-12">{children}{path === "/" ? <p className="mt-8 text-center text-[11px] leading-snug text-mist">Software registrato SIAE – Registro Pubblico Speciale per i programmi per elaboratore<br />TRITONE - LA VOCE DEL MARE · Numero di registrazione: D000030864 – 27/10/2026 · Numero progressivo: D000032389 · Pubblicazione: 07/10/2026</p> : null}<Copyright className={path === "/" ? "mt-3" : "mt-10"} /></main>
+        <main className="px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:px-8 md:pb-12"><div key={path} className="pagina">{children}</div>{path === "/" ? <p className="mt-8 text-center text-[11px] leading-snug text-mist">Software registrato SIAE – Registro Pubblico Speciale per i programmi per elaboratore<br />TRITONE - LA VOCE DEL MARE · Numero di registrazione: D000030864 – 27/10/2026 · Numero progressivo: D000032389 · Pubblicazione: 07/10/2026</p> : null}<Copyright className={path === "/" ? "mt-3" : "mt-10"} /></main>
       </div>
       <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t-2 border-lagoon bg-deep px-2 pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] md:hidden">
         {rigaProva ? <p className="mx-auto mb-1 max-w-lg px-2 text-center text-xs text-brass">{rigaProva}</p> : null}
@@ -740,6 +740,7 @@ function RigaNome({ conto, path }: { conto: number; path: string }) {
         </Link>
         <Link
           to="/profilo"
+          search={{ scuola: false }}
           aria-label={t("Profilo")}
           className={`grid h-11 w-11 place-items-center ${path.startsWith("/profilo") ? "text-brass" : "text-foam"}`}
         >
@@ -791,7 +792,7 @@ function ProfileChip({ gate }: { gate: boolean }) {
   const [busy, setBusy] = useState(false);
   return (
     <div className="border-t border-line px-4 py-4">
-      <Link to="/profilo" className="block">
+      <Link to="/profilo" search={{ scuola: false }} className="block">
         <p className="text-sm">
           {frame.profile?.nome} {frame.profile?.cognome}
         </p>

@@ -14,6 +14,8 @@ import { prepareFotoProfilo } from "@/lib/prepare-file";
 import { useT, messaggioErrore, type Traduci } from "@/lib/i18n";
 import { wizardGiaVisto } from "@/components/wizard-sub";
 import { SegnoPro } from "@/components/segno-pro";
+import { ConvalideInAttesa } from "@/components/convalida-log";
+import { viaggiDaCompilare, type ViaggioDaCompilare } from "@/lib/viaggi.functions";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -102,6 +104,7 @@ function HomeBody() {
   return (
     <div className="mx-auto max-w-3xl">
       <p className="text-sm text-mist">{t("Subacqueo")}</p>
+      <ConvalideInAttesa />
       {frame.abbonamento.ruolo === "sub" && !frame.abbonamento.proAperto ? (
         <Link to="/piano" search={{ esito: undefined, session_id: undefined, tipo: undefined }} className="mt-3 block rounded-2xl border border-brass bg-brass/15 px-4 py-3 text-sm font-medium text-brass">
           {t("Passa a Pro — 14,90 €/anno")}
@@ -112,6 +115,7 @@ function HomeBody() {
           {t("Completa i tuoi documenti")}
         </Link>
       ) : null}
+      <BannerViaggi />
 
       <div className="mt-5 flex items-stretch gap-4 rounded-card border border-line bg-deep p-3">
         <FotoProfilo />
@@ -200,6 +204,43 @@ function HomeBody() {
 
       <p className="mt-8 text-xs leading-relaxed text-mist">{t("Modelli operativi allineati alla Legge 7 maggio 2026, n. 70 e alle prassi documentali di settore. Non sostituiscono certificati o polizze. I registri vanno conservati secondo normativa.")}</p>
       <InstallApp />
+    </div>
+  );
+}
+
+function BannerViaggi() {
+  const t = useT();
+  const [viaggi, setViaggi] = useState<ViaggioDaCompilare[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    viaggiDaCompilare()
+      .then((rows) => {
+        if (live) setViaggi(rows);
+      })
+      .catch(() => {
+        if (live) setViaggi([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (!viaggi.length) return null;
+  return (
+    <div className="mt-4 grid gap-2">
+      {viaggi.map((item) => (
+        <Link
+          key={item.id}
+          to="/attivita-soci"
+          search={{ id: undefined, club: undefined, socio: false, viaggio: item.id, invio: true }}
+          className="block rounded-2xl border border-brass bg-brass/15 px-4 py-3"
+        >
+          <span className="block text-sm font-medium text-brass">{t("Invia moduli viaggio")}</span>
+          <span className="mt-1 block text-sm">{item.titolo}</span>
+          {item.clubNome ? <span className="mt-1 block text-xs text-mist">{item.clubNome}</span> : null}
+        </Link>
+      ))}
     </div>
   );
 }

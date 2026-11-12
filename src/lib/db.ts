@@ -137,7 +137,7 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    // migrations/*.sql, including 0053_specie_pro.sql, applied once per module instance
+    // migrations/*.sql, including 0058_viaggi.sql, applied once per module instance
     const migrations = import.meta.glob("/migrations/*.sql", {
       query: "?raw",
       import: "default",

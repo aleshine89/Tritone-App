@@ -12,7 +12,7 @@ import { calcolaAbbonamento, entroProva, FINE_PROVA, nascitaDiving, nascitaSub, 
 import { tettoStaff } from "@/lib/prezzi";
 import { chiaveQuando, scriviUddf, type PuntoProfilo, type UddfRiga } from "@/lib/uddf";
 import { leggiNotaAnagrafica, notaAnagrafica, testoNotaAnagrafica, type NotaAnagrafica } from "@/lib/anagrafica";
-import { problemiDocumenti } from "@/lib/format";
+import { problemiDocumenti, mesiCompiuti } from "@/lib/format";
 
 export type Profile = {
   userId: string;
@@ -52,6 +52,8 @@ export type ClubPublic = {
   citta: string;
   provincia: string;
   sito: string;
+  piano: "" | "trial" | "active" | "sospeso";
+  provaFino: string;
   attivoFino: string;
   postiStaff: number;
   postiTetto: number;
@@ -125,12 +127,13 @@ export type Notice = {
   body: string;
   createdAt: string;
   read: boolean;
-  kind: "scheda" | "affiliazione" | "esito" | "iscrizione" | "abbandono" | "condivisione";
+  kind: "scheda" | "affiliazione" | "esito" | "iscrizione" | "abbandono" | "condivisione" | "convalida";
   nota: NotaAnagrafica | null;
   divingNome: string;
   persona: string;
   shareId?: number;
   shareStato?: string;
+  convalidaId?: number;
 };
 
 const EMPTY_CLUB: ClubPublic = {
@@ -153,6 +156,8 @@ const EMPTY_CLUB: ClubPublic = {
   citta: "",
   provincia: "",
   sito: "",
+  piano: "",
+  provaFino: "",
   attivoFino: "",
   postiStaff: 0,
   postiTetto: 0,
@@ -310,6 +315,8 @@ function toClub(row: ClubRow | null, mode: "owner" | "staff" | "diver" | "none")
     citta: row.citta ?? "",
     provincia: row.provincia ?? "",
     sito: row.sito ?? "",
+    piano: row.piano === "trial" || row.piano === "active" || row.piano === "sospeso" ? row.piano : "",
+    provaFino: (row.prova_fino ?? "").slice(0, 10),
     attivoFino: (row.attivo_fino ?? "").slice(0, 10),
     postiStaff: 0,
     postiTetto: tettoStaff(row.mezzo_nautico == null ? true : asBool(row.mezzo_nautico), row.posti_limite == null ? null : Number(row.posti_limite), Number(row.posti_extra ?? 0)),
@@ -569,6 +576,52 @@ async function unreadPiattaforma(sql: Sql, userId: string): Promise<{ n: number;
   return { n: Number(rows[0]?.n ?? 0), avviso: rows[0]?.avviso ?? "" };
 }
 
+let convalidePronte = false;
+let librettoPronto = false;
+
+async function assicuraLibretto(sql: Sql) {
+  if (librettoPronto) return;
+  await sql`alter table logbook_entries add column if not exists autorespiratore text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists brevetto text not null default ''`;
+  librettoPronto = true;
+}
+
+async function assicuraConvalide(sql: Sql) {
+  if (convalidePronte) return;
+  await sql`
+    create table if not exists logbook_convalide (
+      id serial primary key,
+      entry_id integer not null,
+      from_user_id text not null,
+      to_user_id text not null,
+      from_name text not null,
+      stato text not null default 'inviata',
+      notification_id integer,
+      created_at timestamptz not null default now()
+    )
+  `;
+  convalidePronte = true;
+}
+
+async function contaConvalide(sql: Sql, userId: string): Promise<{ n: number; avviso: string }> {
+  await assicuraConvalide(sql);
+  const rows = await sql<{ n: number; avviso: string }>`
+    select count(*)::int as n,
+      coalesce((
+        select n2.body
+        from notifications n2
+        where n2.audience = 'sub' and n2.user_id = ${userId} and n2.title = 'Convalida immersione'
+          and not exists (select 1 from notification_reads r where r.notification_id = n2.id and r.user_id = ${userId})
+        order by n2.created_at desc
+        limit 1
+      ), '') as avviso
+    from notifications n
+    where n.audience = 'sub' and n.user_id = ${userId} and n.title = 'Convalida immersione'
+      and not exists (select 1 from notification_reads r where r.notification_id = n.id and r.user_id = ${userId})
+  `;
+  return { n: Number(rows[0]?.n ?? 0), avviso: rows[0]?.avviso ?? "" };
+}
+
 async function unreadEsito(sql: Sql, userId: string): Promise<{ n: number; avviso: string }> {
   await assicuraEsiti(sql, userId);
   const rows = await sql<{ n: number; avviso: string }>`
@@ -609,6 +662,11 @@ async function pack(sql: Sql, userId: string): Promise<SessionContext> {
   const owner = owns;
   const mode = !clubRow || (platform && !owns) ? "none" : owner ? "owner" : staff ? "staff" : "diver";
   const unread = staff && clubRow ? await unreadFor(sql, userId, Number(clubRow.id), owner) : { n: 0, avviso: "" };
+  if (staff) {
+    const convalide = await contaConvalide(sql, userId);
+    unread.n += convalide.n;
+    if (convalide.n > 0 && convalide.avviso) unread.avviso = convalide.avviso;
+  }
   const gestore = platform ? await unreadPiattaforma(sql, userId) : { n: 0, avviso: "" };
   const esito = await unreadEsito(sql, userId);
   const tipoLegale = profile ? tipoLegaleDi(profile, clubRow, userId) : "subacqueo";
@@ -2438,6 +2496,14 @@ function letto(value: boolean | string): boolean {
   return value === true || value === "t" || value === "true";
 }
 
+function corpoViaggio(title: string, body: string): { body: string; viaggioId: number } {
+  if (title !== "Invia moduli viaggio") return { body, viaggioId: 0 };
+  const taglio = body.indexOf("\n");
+  const id = Number(taglio > 0 ? body.slice(0, taglio) : "");
+  if (!Number.isInteger(id) || id <= 0) return { body, viaggioId: 0 };
+  return { body: body.slice(taglio + 1), viaggioId: id };
+}
+
 async function vedeAvviso(sql: Sql, userId: string, id: number): Promise<boolean> {
   const rows = await sql<{ audience: string; club_id: number | null; user_id: string | null }>`
     select audience, club_id, user_id from notifications where id = ${id}
@@ -2461,6 +2527,7 @@ export const listNotices = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ vista: vistaAvviso(input) }))
   .handler(async ({ context, data }): Promise<{ allowed: boolean; items: Notice[] }> => {
     const sql = await getSql();
+    await assicuraConvalide(sql);
     const profile = await loadProfile(sql, context.userId);
     if (!profile) return { allowed: false, items: [] };
     if (data.vista === "gestore") {
@@ -2527,6 +2594,9 @@ export const listNotices = createServerFn({ method: "POST" })
         share_id: number | null;
         share_stato: string | null;
         share_from: string | null;
+        convalida_id: number | null;
+        convalida_stato: string | null;
+        convalida_from: string | null;
       }>`
         select n.id, n.title, n.body,
                to_char(n.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') as created_at,
@@ -2537,10 +2607,14 @@ export const listNotices = createServerFn({ method: "POST" })
                a.diving_nome,
                c.id as share_id,
                c.stato as share_stato,
-               c.from_name as share_from
+               c.from_name as share_from,
+               v.id as convalida_id,
+               v.stato as convalida_stato,
+               v.from_name as convalida_from
         from notifications n
         left join affiliazioni a on a.id = n.affiliazione_id
         left join logbook_condivisioni c on c.notification_id = n.id
+        left join logbook_convalide v on v.notification_id = n.id
         where n.audience = 'sub'
           and n.user_id = ${context.userId}
         order by n.created_at desc
@@ -2548,24 +2622,30 @@ export const listNotices = createServerFn({ method: "POST" })
       `;
       return {
         allowed: true,
-        items: rows.map((row) => ({
-          id: Number(row.id),
-          submissionId: 0,
-          title: row.title,
-          body: row.body,
-          createdAt: row.created_at,
-          read: letto(row.read),
-          kind: row.share_id ? ("condivisione" as const) : ("esito" as const),
-          nota: null,
-          divingNome: row.diving_nome ?? "",
-          persona: row.share_from ?? "",
-          shareId: Number(row.share_id ?? 0),
-          shareStato: row.share_stato ?? "",
-        })),
+        items: rows.map((row) => {
+          const viaggio = corpoViaggio(row.title, row.body);
+          const convalida = Boolean(row.convalida_id);
+          return {
+            id: Number(row.id),
+            submissionId: 0,
+            title: row.title,
+            body: viaggio.body,
+            createdAt: row.created_at,
+            read: letto(row.read),
+            kind: convalida ? ("convalida" as const) : row.share_id ? ("condivisione" as const) : ("esito" as const),
+            nota: null,
+            divingNome: row.diving_nome ?? "",
+            persona: convalida ? (row.convalida_from ?? "") : (row.share_from ?? ""),
+            shareId: row.share_id ? Number(row.share_id) : viaggio.viaggioId,
+            shareStato: convalida ? (row.convalida_stato ?? "") : (row.share_stato ?? ""),
+            convalidaId: convalida ? Number(row.convalida_id) : undefined,
+          };
+        }),
       };
     }
     const club = profile.clubId ? await loadClubById(sql, profile.clubId) : null;
-    if (!club || !deskOf(profile, club)) return { allowed: false, items: [] };
+    const mie = await avvisiConvalida(sql, context.userId);
+    if (!club || !deskOf(profile, club)) return { allowed: mie.length > 0, items: mie };
     const clubId = Number(club.id);
     const owner = eTitolare(club, profile.userId);
     const rows = await sql<{
@@ -2590,7 +2670,7 @@ export const listNotices = createServerFn({ method: "POST" })
     `;
     return {
       allowed: true,
-      items: rows.map((row) => ({
+      items: [...mie, ...rows.map((row) => ({
         id: Number(row.id),
         submissionId: Number(row.submission_id ?? 0),
         title: row.title,
@@ -2601,9 +2681,49 @@ export const listNotices = createServerFn({ method: "POST" })
         nota: null,
         divingNome: "",
         persona: "",
-      })),
+      }))],
     };
   });
+
+async function avvisiConvalida(sql: Sql, userId: string): Promise<Notice[]> {
+  const rows = await sql<{
+    id: number;
+    title: string;
+    body: string;
+    created_at: string;
+    read: boolean | string;
+    convalida_id: number;
+    stato: string;
+    from_name: string;
+  }>`
+    select n.id, n.title, n.body,
+           to_char(n.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') as created_at,
+           exists(
+             select 1 from notification_reads r
+             where r.notification_id = n.id and r.user_id = ${userId}
+           ) as read,
+           v.id as convalida_id, v.stato, v.from_name
+    from notifications n
+    join logbook_convalide v on v.notification_id = n.id
+    where n.user_id = ${userId} and n.title = 'Convalida immersione'
+    order by n.created_at desc
+    limit 20
+  `;
+  return rows.map((row) => ({
+    id: Number(row.id),
+    submissionId: 0,
+    title: row.title,
+    body: row.body,
+    createdAt: row.created_at,
+    read: letto(row.read),
+    kind: "convalida" as const,
+    nota: null,
+    divingNome: "",
+    persona: row.from_name,
+    shareStato: row.stato,
+    convalidaId: Number(row.convalida_id),
+  }));
+}
 
 export const markNoticeRead = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -2704,11 +2824,20 @@ export type LogEntry = {
   condivisaDa: string;
   decompressione: "" | "si" | "no";
   profilo: PuntoProfilo[];
+  oraFine: string;
+  centro: string;
+  guidaNome: string;
+  guidaFirma: string;
+  profonditaPrevista: string;
+  autorespiratore: string;
+  brevetto: string;
+  viaggioGruppoId: number | null;
+  convalidaGuida: string;
 };
 
 const MIXES = ["Aria", "Nitrox", "Trimix"] as const;
 
-function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" | "condivisaDa" | "profilo"> & { id: number | null } {
+function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "condivisaDa" | "viaggioGruppoId" | "convalidaGuida"> & { id: number | null } {
   const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
   const id = Number(raw.id);
   const data = asText(raw.data).slice(0, 10);
@@ -2729,6 +2858,11 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" 
   if ((lat && !lng) || (!lat && lng)) throw new Error("Servono sia latitudine sia longitudine.");
   const decompressione = asText(raw.decompressione);
   if (decompressione !== "" && decompressione !== "si" && decompressione !== "no") throw new Error("Scegli se c'è stata decompressione.");
+  const ora = oraLog(raw.ora);
+  const oraFine = oraLog(raw.oraFine);
+  const firma = asText(raw.guidaFirma);
+  const respiratori = ["Circuito aperto", "Rebreather", "Aria di superficie"];
+  const autorespiratore = asText(raw.autorespiratore);
   return {
     id: Number.isInteger(id) && id > 0 ? id : null,
     data,
@@ -2745,7 +2879,21 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "ora" 
     lat,
     lng,
     decompressione,
+    ora,
+    oraFine,
+    centro: asText(raw.centro).trim().slice(0, 120),
+    guidaNome: asText(raw.guidaNome).trim().slice(0, 120),
+    guidaFirma: firma.startsWith("data:image/png;base64,") && firma.length < 300_000 ? firma : "",
+    profonditaPrevista: num("profonditaPrevista", 400),
+    autorespiratore: respiratori.includes(autorespiratore) ? autorespiratore : "",
+    brevetto: asText(raw.brevetto).trim().slice(0, 120),
+    profilo: profiloDi(raw.profilo),
   };
+}
+
+function oraLog(value: unknown): string {
+  const text = asText(value).trim().slice(0, 5);
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : "";
 }
 
 function coord(value: unknown, min: number, max: number): string {
@@ -2778,6 +2926,15 @@ function toLog(row: {
   condivisa_da: string;
   dive_profile: string;
   decompressione: string;
+  ora_fine: string;
+  centro: string;
+  guida_nome: string;
+  guida_firma: string;
+  profondita_prevista: string;
+  autorespiratore: string;
+  brevetto: string;
+  viaggio_gruppo_id: number | null;
+  convalida_guida: string | null;
 }): LogEntry {
   const profilo = profiloDi(profiloJson(row.dive_profile));
   return {
@@ -2801,6 +2958,15 @@ function toLog(row: {
     condivisaDa: row.condivisa_da ?? "",
     decompressione: row.decompressione === "si" || row.decompressione === "no" ? row.decompressione : "",
     profilo,
+    oraFine: (row.ora_fine ?? "").slice(0, 5),
+    centro: row.centro ?? "",
+    guidaNome: row.guida_nome ?? "",
+    guidaFirma: row.guida_firma ?? "",
+    profonditaPrevista: row.profondita_prevista ?? "",
+    autorespiratore: row.autorespiratore ?? "",
+    brevetto: row.brevetto ?? "",
+    viaggioGruppoId: row.viaggio_gruppo_id == null ? null : Number(row.viaggio_gruppo_id),
+    convalidaGuida: row.convalida_guida ?? "",
   };
 }
 
@@ -2827,6 +2993,8 @@ export const listLogbook = createServerFn({ method: "POST" })
     const sql = await getSql();
     const profile = await loadProfile(sql, context.userId);
     if (!profile) throw new Error("Completa prima il profilo.");
+    await assicuraConvalide(sql);
+    await assicuraLibretto(sql);
     const rows = await sql<{
       id: number;
       dive_date: string;
@@ -2848,8 +3016,26 @@ export const listLogbook = createServerFn({ method: "POST" })
       condivisa_da: string;
       dive_profile: string;
       decompressione: string;
+      ora_fine: string;
+      centro: string;
+      guida_nome: string;
+      guida_firma: string;
+      profondita_prevista: string;
+      autorespiratore: string;
+      brevetto: string;
+      viaggio_gruppo_id: number | null;
+      convalida_guida: string | null;
     }>`
       select id, dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da, dive_profile, decompressione,
+        ora_fine, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto, viaggio_gruppo_id,
+        (
+          select trim(coalesce(p.cognome, '') || ' ' || coalesce(p.nome, ''))
+          from logbook_convalide v
+          join profiles p on p.user_id = v.to_user_id
+          where v.entry_id = logbook_entries.id and v.stato = 'inviata'
+          order by v.id desc
+          limit 1
+        ) as convalida_guida,
         (select count(*)::int from logbook_photos p where p.entry_id = logbook_entries.id) as foto,
         (select count(*)::int from logbook_voice v where v.entry_id = logbook_entries.id) as voce
       from logbook_entries
@@ -2868,6 +3054,7 @@ export const saveLogbook = createServerFn({ method: "POST" })
     const profile = await loadProfile(sql, context.userId);
     if (!profile) throw new Error("Completa prima il profilo.");
     if (data.decompressione !== "si" && data.decompressione !== "no") throw new Error("Scegli se c'è stata decompressione.");
+    await assicuraLibretto(sql);
     if (data.id) {
       const owned = await sql<{ id: number }>`
         select id from logbook_entries where id = ${data.id} and user_id = ${context.userId}
@@ -2889,18 +3076,33 @@ export const saveLogbook = createServerFn({ method: "POST" })
             lat = ${data.lat},
             lng = ${data.lng},
             decompressione = ${data.decompressione},
+            dive_time = ${data.ora},
+            ora_fine = ${data.oraFine},
+            dive_profile = ${JSON.stringify(data.profilo)},
+            centro = ${data.centro},
+            guida_nome = ${data.guidaNome},
+            profondita_prevista = ${data.profonditaPrevista},
+            autorespiratore = ${data.autorespiratore},
+            brevetto = ${data.brevetto},
+            guida_firma = case when ${data.guidaFirma} = '' then guida_firma else ${data.guidaFirma} end,
             updated_at = now()
         where id = ${data.id} and user_id = ${context.userId}
       `;
+      if (data.guidaFirma) {
+        await assicuraConvalide(sql);
+        await sql`update logbook_convalide set stato = 'sostituita' where entry_id = ${data.id} and stato = 'inviata'`;
+      }
       return { id: data.id };
     }
     const inserted = await sql<{ id: number }>`
       insert into logbook_entries (
-        user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, decompressione
+        user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, decompressione,
+        dive_time, ora_fine, dive_profile, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto
       ) values (
         ${context.userId}, ${data.data}, ${data.localita}, ${data.punto}, ${data.profondita},
         ${data.minuti}, ${data.buddy}, ${data.miscela}, ${data.ossigeno}, ${data.temperatura},
-        ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}, ${data.decompressione}
+        ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}, ${data.decompressione},
+        ${data.ora}, ${data.oraFine}, ${JSON.stringify(data.profilo)}, ${data.centro}, ${data.guidaNome}, ${data.guidaFirma}, ${data.profonditaPrevista}, ${data.autorespiratore}, ${data.brevetto}
       )
       returning id
     `;
@@ -3008,6 +3210,59 @@ export const cercaCompagni = createServerFn({ method: "POST" })
     });
   });
 
+export const cercaDivingGuida = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const q = asText((input as { q?: unknown } | null)?.q).trim().slice(0, 60);
+    if (q.length < 2) throw new Error("Scrivi almeno due lettere.");
+    return { q };
+  })
+  .handler(async ({ data }): Promise<{ id: number; nome: string; sede: string }[]> => {
+    const sql = await getSql();
+    const like = `%${data.q.replace(/[%_]/g, "")}%`;
+    const rows = await sql<{ id: number; nome: string; sede: string }>`
+      select id, nome, coalesce(sede, '') as sede
+      from club
+      where coalesce(stato, 'attiva') = 'attiva'
+        and (nome ilike ${like} or sede ilike ${like} or citta ilike ${like})
+      order by nome, id
+      limit 12
+    `;
+    return rows.map((row) => ({ id: Number(row.id), nome: row.nome, sede: row.sede }));
+  });
+
+export const guideDelDiving = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const clubId = Number((input as { clubId?: unknown } | null)?.clubId);
+    if (!Number.isInteger(clubId) || clubId <= 0) throw new Error("Scegli il diving.");
+    return { clubId };
+  })
+  .handler(async ({ context, data }): Promise<CompagnoLogbook[]> => {
+    const sql = await getSql();
+    const club = await sql<{ id: number }>`
+      select id from club where id = ${data.clubId} and coalesce(stato, 'attiva') = 'attiva' limit 1
+    `;
+    if (!club[0]) return [];
+    const rows = await sql<{ user_id: string; nome: string | null; cognome: string | null }>`
+      select distinct p.user_id, p.nome, p.cognome
+      from profiles p
+      where p.user_id <> ${context.userId}
+        and (
+          p.user_id in (select owner_user_id from club where id = ${data.clubId} and owner_user_id is not null)
+          or p.user_id in (select co_owner_user_id from club where id = ${data.clubId} and co_owner_user_id is not null)
+          or p.user_id in (select user_id from staff_membri where club_id = ${data.clubId})
+        )
+      order by p.cognome nulls last, p.nome nulls last
+    `;
+    return rows.flatMap((row) => {
+      const nome = (row.nome ?? "").trim();
+      const cognome = (row.cognome ?? "").trim();
+      if (!nome && !cognome) return [];
+      return [{ userId: row.user_id, nome, cognome, foto: "" }];
+    });
+  });
+
 export const condividiImmersione = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: unknown) => {
@@ -3097,6 +3352,123 @@ export const condividiImmersione = createServerFn({ method: "POST" })
     }
     if (!inviati) throw new Error("Nessun compagno nuovo da avvisare.");
     return { inviati };
+  });
+
+export const chiediConvalida = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const entryId = Number(raw.entryId);
+    const guidaUserId = asText(raw.guidaUserId).trim();
+    if (!Number.isInteger(entryId) || entryId <= 0 || !guidaUserId) throw new Error("Scegli la guida.");
+    return { entryId, guidaUserId };
+  })
+  .handler(async ({ context, data }): Promise<{ guida: string }> => {
+    const sql = await getSql();
+    await assicuraConvalide(sql);
+    const profile = await loadProfile(sql, context.userId);
+    if (!profile) throw new Error("Completa prima il profilo.");
+    if (data.guidaUserId === context.userId) throw new Error("Scegli un'altra persona.");
+    const guida = await sql<{ nome: string | null; cognome: string | null }>`
+      select nome, cognome from profiles where user_id = ${data.guidaUserId} limit 1
+    `;
+    if (!guida[0]) throw new Error("Questa guida non è su Tritone.");
+    const righe = await sql<{ dive_date: string; site: string; point: string; depth_m: string; guida_firma: string; viaggio_gruppo_id: number | null }>`
+      select dive_date::text as dive_date, site, point, depth_m, guida_firma, viaggio_gruppo_id
+      from logbook_entries
+      where id = ${data.entryId} and user_id = ${context.userId}
+      limit 1
+    `;
+    const entry = righe[0];
+    if (!entry) throw new Error("Questa immersione non è nel tuo logbook.");
+    if (entry.viaggio_gruppo_id) throw new Error("Questa immersione arriva da un viaggio.");
+    if ((entry.guida_firma ?? "").length > 0) throw new Error("Questa immersione è già validata.");
+    const nomeGuida = `${(guida[0].cognome ?? "").trim()} ${(guida[0].nome ?? "").trim()}`.trim();
+    const da = `${profile.nome} ${profile.cognome}`.trim() || "Un subacqueo";
+    const quando = entry.dive_date.slice(0, 10);
+    const dove = [entry.point || entry.site, entry.depth_m ? `${entry.depth_m} m` : ""].filter(Boolean).join(", ");
+    const corpo = `${da} ti chiede di convalidare l'immersione del ${quando}${dove ? ` a ${dove}` : ""}.`;
+    await sql`update logbook_convalide set stato = 'sostituita' where entry_id = ${data.entryId} and stato = 'inviata'`;
+    const nota = await sql<{ id: number }>`
+      insert into notifications (submission_id, title, body, audience, club_id, user_id)
+      values (null, 'Convalida immersione', ${corpo}, 'sub', null, ${data.guidaUserId})
+      returning id
+    `;
+    const notificationId = Number(nota[0]?.id);
+    await sql`
+      insert into logbook_convalide (entry_id, from_user_id, to_user_id, from_name, stato, notification_id)
+      values (${data.entryId}, ${context.userId}, ${data.guidaUserId}, ${da}, 'inviata', ${notificationId || null})
+    `;
+    await pushUsers(sql, [data.guidaUserId], "Convalida immersione", corpo, "/notifiche");
+    return { guida: nomeGuida };
+  });
+
+export const convalideInAttesa = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<{ id: number; da: string; testo: string }[]> => {
+    const sql = await getSql();
+    await assicuraConvalide(sql);
+    const rows = await sql<{ id: number; from_name: string; body: string | null; dive_date: string; site: string; point: string }>`
+      select v.id, v.from_name, n.body, e.dive_date::text as dive_date, e.site, e.point
+      from logbook_convalide v
+      join logbook_entries e on e.id = v.entry_id
+      left join notifications n on n.id = v.notification_id
+      where v.to_user_id = ${context.userId} and v.stato = 'inviata'
+      order by v.id desc
+      limit 10
+    `;
+    return rows.map((row) => ({
+      id: Number(row.id),
+      da: row.from_name,
+      testo: row.body || `${row.from_name} ti chiede di convalidare l'immersione del ${row.dive_date.slice(0, 10)} a ${row.point || row.site}.`,
+    }));
+  });
+
+export const firmaConvalida = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const id = Number(raw.id);
+    const firma = asText(raw.firma);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Richiesta non valida.");
+    if (!firma.startsWith("data:image/png;base64,") || firma.length >= 300_000) throw new Error("Firma col dito.");
+    return { id, firma };
+  })
+  .handler(async ({ context, data }): Promise<{ ok: true }> => {
+    const sql = await getSql();
+    await assicuraConvalide(sql);
+    const profile = await loadProfile(sql, context.userId);
+    if (!profile) throw new Error("Completa prima il profilo.");
+    const rows = await sql<{ entry_id: number; from_user_id: string }>`
+      select entry_id, from_user_id from logbook_convalide
+      where id = ${data.id} and to_user_id = ${context.userId} and stato = 'inviata'
+      limit 1
+    `;
+    const richiesta = rows[0];
+    if (!richiesta) throw new Error("Questa richiesta non è più in attesa.");
+    const nome = `${profile.cognome} ${profile.nome}`.trim();
+    const updated = await sql<{ id: number }>`
+      update logbook_entries
+      set guida_nome = ${nome}, guida_firma = ${data.firma}, updated_at = now()
+      where id = ${richiesta.entry_id} and user_id = ${richiesta.from_user_id} and coalesce(guida_firma, '') = '' and viaggio_gruppo_id is null
+      returning id
+    `;
+    if (!updated[0]) throw new Error("Questa immersione è già validata.");
+    await sql`update logbook_convalide set stato = 'firmata' where id = ${data.id}`;
+    await sql`
+      insert into notification_reads (notification_id, user_id)
+      select notification_id, ${context.userId}
+      from logbook_convalide
+      where id = ${data.id} and notification_id is not null
+      on conflict (notification_id, user_id) do nothing
+    `;
+    const corpo = `${nome} ha convalidato la tua immersione.`;
+    await sql`
+      insert into notifications (submission_id, title, body, audience, club_id, user_id)
+      values (null, 'Immersione validata', ${corpo}, 'sub', null, ${richiesta.from_user_id})
+    `;
+    await pushUsers(sql, [richiesta.from_user_id], "Immersione validata", corpo, "/logbook");
+    return { ok: true };
   });
 
 export const leggiCondivisione = createServerFn({ method: "POST" })
@@ -6725,6 +7097,7 @@ export type UscitaGiorno = {
   motivoRapporto: string;
   chiusaPrima: string | null;
   chiusaDopo: string | null;
+  viaggioId: number | null;
   gruppi: GruppoUscita[];
   righe: RigaUscita[];
 };
@@ -6776,8 +7149,9 @@ async function loadUscita(sql: Sql, clubId: number, id: number): Promise<UscitaG
     motivo_rapporto: string;
     chiusa_prima: string | null;
     chiusa_dopo: string | null;
+    viaggio_id: number | null;
   }>`
-    select id, data::text as data, localita, punto, imbarcazione, imbarcazione_id, guida_user_id, guida_nome, orario_inizio, motivo_rapporto,
+    select id, data::text as data, localita, punto, imbarcazione, imbarcazione_id, guida_user_id, guida_nome, orario_inizio, motivo_rapporto, viaggio_id,
            to_char(chiusa_prima, 'YYYY-MM-DD"T"HH24:MI') as chiusa_prima,
            to_char(chiusa_dopo, 'YYYY-MM-DD"T"HH24:MI') as chiusa_dopo
     from uscite where id = ${id} and club_id = ${clubId}
@@ -6870,6 +7244,7 @@ async function loadUscita(sql: Sql, clubId: number, id: number): Promise<UscitaG
     motivoRapporto: row.motivo_rapporto,
     chiusaPrima: row.chiusa_prima,
     chiusaDopo: row.chiusa_dopo,
+    viaggioId: row.viaggio_id == null ? null : Number(row.viaggio_id),
     gruppi,
     righe,
   };
@@ -7702,7 +8077,7 @@ export const graficiScuola = createServerFn({ method: "POST" })
 
 export const listUscite = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<{ id: number; data: string; localita: string; imbarcazione: string; guidaNome: string; persone: number; fase: "prima" | "dopo" | "chiusa" }[]> => {
+  .handler(async ({ context }): Promise<{ id: number; data: string; localita: string; imbarcazione: string; guidaNome: string; persone: number; fase: "prima" | "dopo" | "chiusa"; viaggioId: number | null }[]> => {
     const sql = await getSql();
     const profile = await requireStaff(sql, context.userId);
     await requireScuolaAperta(sql, profile);
@@ -7715,6 +8090,7 @@ export const listUscite = createServerFn({ method: "POST" })
       persone: number;
       chiusa_prima: string | null;
       chiusa_dopo: string | null;
+      viaggio_id: number | null;
     }>`
       select u.id, u.data::text as data, u.localita, u.imbarcazione,
              coalesce(
@@ -7722,7 +8098,7 @@ export const listUscite = createServerFn({ method: "POST" })
                u.guida_nome
              ) as guida_nome,
              (select count(*)::int from uscita_righe r where r.uscita_id = u.id) as persone,
-             u.chiusa_prima::text as chiusa_prima, u.chiusa_dopo::text as chiusa_dopo
+             u.chiusa_prima::text as chiusa_prima, u.chiusa_dopo::text as chiusa_dopo, u.viaggio_id
       from uscite u
       where u.club_id = ${profile.clubId}
       order by u.data desc, u.id desc
@@ -7736,6 +8112,7 @@ export const listUscite = createServerFn({ method: "POST" })
       guidaNome: row.guida_nome,
       persone: Number(row.persone),
       fase: row.chiusa_dopo ? "chiusa" : row.chiusa_prima ? "dopo" : "prima",
+      viaggioId: row.viaggio_id == null ? null : Number(row.viaggio_id),
     }));
   });
 
@@ -7837,11 +8214,14 @@ export const eliminaGiornata = createServerFn({ method: "POST" })
     const sql = await getSql();
     const profile = await requireStaff(sql, context.userId);
     const clubId = profile.clubId ?? 0;
-    const rows = await sql<{ data: string; chiusa_dopo: string | null }>`
-      select data::text as data, chiusa_dopo::text as chiusa_dopo from uscite where id = ${data.id} and club_id = ${clubId}
+    const rows = await sql<{ data: string; chiusa_dopo: string | null; viaggio_id: number | null }>`
+      select data::text as data, chiusa_dopo::text as chiusa_dopo, viaggio_id from uscite where id = ${data.id} and club_id = ${clubId}
     `;
     const row = rows[0];
     if (!row) throw new Error("Uscita non trovata.");
+    if (row.viaggio_id && !mesiCompiuti(row.data.slice(0, 10), todayRome())) {
+      throw new Error("Il registro di un viaggio resta per sei mesi.");
+    }
     if (!row.chiusa_dopo) {
       await sql`delete from uscite where id = ${data.id} and club_id = ${clubId}`;
       return { ok: true };
