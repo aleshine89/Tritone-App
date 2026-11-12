@@ -6,6 +6,7 @@ import { signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
 import { avvisaScadenze } from "@/lib/avvisi-scadenza";
+import { segnaAppAperta } from "@/lib/error-component";
 import { ClubLogo } from "@/components/club-logo";
 import { Copyright } from "@/components/copyright";
 import { MascheraPro } from "@/components/maschera-pro";
@@ -225,6 +226,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       /* ignora */
     }
     setPronta(true);
+    segnaAppAperta();
   }, []);
 
   useEffect(() => {
