@@ -16,6 +16,7 @@ import { Route as AttivitaSociRouteImport } from './routes/attivita-soci'
 import { Route as AttrezzaturaRouteImport } from './routes/attrezzatura'
 import { Route as CercaDivingRouteImport } from './routes/cerca-diving'
 import { Route as ComunicazioniSociRouteImport } from './routes/comunicazioni-soci'
+import { Route as CondizioniRouteImport } from './routes/condizioni'
 import { Route as GraficiRouteImport } from './routes/grafici'
 import { Route as IniziaRouteImport } from './routes/inizia'
 import { Route as LogbookRouteImport } from './routes/logbook'
@@ -66,6 +67,11 @@ const CercaDivingRoute = CercaDivingRouteImport.update({
 const ComunicazioniSociRoute = ComunicazioniSociRouteImport.update({
   id: '/comunicazioni-soci',
   path: '/comunicazioni-soci',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CondizioniRoute = CondizioniRouteImport.update({
+  id: '/condizioni',
+  path: '/condizioni',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GraficiRoute = GraficiRouteImport.update({
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/attrezzatura': typeof AttrezzaturaRoute
   '/cerca-diving': typeof CercaDivingRoute
   '/comunicazioni-soci': typeof ComunicazioniSociRoute
+  '/condizioni': typeof CondizioniRoute
   '/grafici': typeof GraficiRoute
   '/inizia': typeof IniziaRoute
   '/logbook': typeof LogbookRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/attrezzatura': typeof AttrezzaturaRoute
   '/cerca-diving': typeof CercaDivingRoute
   '/comunicazioni-soci': typeof ComunicazioniSociRoute
+  '/condizioni': typeof CondizioniRoute
   '/grafici': typeof GraficiRoute
   '/inizia': typeof IniziaRoute
   '/logbook': typeof LogbookRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/attrezzatura': typeof AttrezzaturaRoute
   '/cerca-diving': typeof CercaDivingRoute
   '/comunicazioni-soci': typeof ComunicazioniSociRoute
+  '/condizioni': typeof CondizioniRoute
   '/grafici': typeof GraficiRoute
   '/inizia': typeof IniziaRoute
   '/logbook': typeof LogbookRoute
@@ -235,6 +244,7 @@ export interface FileRouteTypes {
     | '/attrezzatura'
     | '/cerca-diving'
     | '/comunicazioni-soci'
+    | '/condizioni'
     | '/grafici'
     | '/inizia'
     | '/logbook'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/attrezzatura'
     | '/cerca-diving'
     | '/comunicazioni-soci'
+    | '/condizioni'
     | '/grafici'
     | '/inizia'
     | '/logbook'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/attrezzatura'
     | '/cerca-diving'
     | '/comunicazioni-soci'
+    | '/condizioni'
     | '/grafici'
     | '/inizia'
     | '/logbook'
@@ -311,6 +323,7 @@ export interface RootRouteChildren {
   AttrezzaturaRoute: typeof AttrezzaturaRoute
   CercaDivingRoute: typeof CercaDivingRoute
   ComunicazioniSociRoute: typeof ComunicazioniSociRoute
+  CondizioniRoute: typeof CondizioniRoute
   GraficiRoute: typeof GraficiRoute
   IniziaRoute: typeof IniziaRoute
   LogbookRoute: typeof LogbookRoute
@@ -378,6 +391,13 @@ declare module '@tanstack/react-router' {
       path: '/comunicazioni-soci'
       fullPath: '/comunicazioni-soci'
       preLoaderRoute: typeof ComunicazioniSociRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/condizioni': {
+      id: '/condizioni'
+      path: '/condizioni'
+      fullPath: '/condizioni'
+      preLoaderRoute: typeof CondizioniRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/grafici': {
@@ -503,6 +523,7 @@ const rootRouteChildren: RootRouteChildren = {
   AttrezzaturaRoute: AttrezzaturaRoute,
   CercaDivingRoute: CercaDivingRoute,
   ComunicazioniSociRoute: ComunicazioniSociRoute,
+  CondizioniRoute: CondizioniRoute,
   GraficiRoute: GraficiRoute,
   IniziaRoute: IniziaRoute,
   LogbookRoute: LogbookRoute,

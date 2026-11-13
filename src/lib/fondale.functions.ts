@@ -940,6 +940,27 @@ export const contaCollegati = createServerFn({ method: "POST" })
     return Number(rows[0]?.n ?? 0);
   });
 
+export const leggiDownloadManuale = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<number> => {
+    const sql = await getSql();
+    await requirePlatform(sql, context.userId);
+    const rows = await sql<{ n: number }>`select n::int as n from manuale_download where id = 1`;
+    return Number(rows[0]?.n ?? 0);
+  });
+
+export const registraDownloadManuale = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<number | null> => {
+    const sql = await getSql();
+    const rows = await sql<{ n: number }>`
+      update manuale_download set n = n + 1 where id = 1 returning n::int as n
+    `;
+    const n = Number(rows[0]?.n ?? 0);
+    const profile = await loadProfile(sql, context.userId);
+    return profile?.role === "piattaforma" ? n : null;
+  });
+
 function readJoin(input: unknown): JoinInput {
   if (!input || typeof input !== "object") throw new Error("Dati mancanti.");
   const raw = input as Record<string, unknown>;

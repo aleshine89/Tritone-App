@@ -7,7 +7,7 @@ import { FotoPiena } from "@/components/foto-vista";
 import { ScaricoDocumento } from "@/components/scarico-doc";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
-import { attivaStaff, aggiungiImbarcazione, aggiungiSecondoTitolare, becomeInstructor, chiediAffiliazione, chiediMezzoNautico, contiIscritti, elencoIscritti, eliminaAccount, esciDalTitolare, esciDalloStaff, getAnagrafica, getTitolare, listImbarcazioni, listStaff, listaBusteScuola, miaAffiliazione, mieiStaff, passaScuola, riscattaAffiliazione, salvaAnagrafica, salvaChiaveScuola, salvaTitolare, scaricaMieiDati, secondoTitolare, seedExamples, setClubLogo, sospendiModuli, togliImbarcazione, togliSecondoTitolare, updateClub, updateCodiceGestore, updateProfile, type Affiliazione, type Allievo, type StaffMio } from "@/lib/fondale.functions";
+import { attivaStaff, aggiungiImbarcazione, aggiungiSecondoTitolare, becomeInstructor, chiediAffiliazione, chiediMezzoNautico, contiIscritti, elencoIscritti, eliminaAccount, esciDalTitolare, esciDalloStaff, getAnagrafica, getTitolare, leggiDownloadManuale, listImbarcazioni, listStaff, listaBusteScuola, miaAffiliazione, mieiStaff, passaScuola, registraDownloadManuale, riscattaAffiliazione, salvaAnagrafica, salvaChiaveScuola, salvaTitolare, scaricaMieiDati, secondoTitolare, seedExamples, setClubLogo, sospendiModuli, togliImbarcazione, togliSecondoTitolare, updateClub, updateCodiceGestore, updateProfile, type Affiliazione, type Allievo, type StaffMio } from "@/lib/fondale.functions";
 import { creaCoppia, cifra, chiaveDaCopiare, chiaveMia, chiaveSulTelefono, codiceFilePerCopia, confermaChiaveCopiata, cifraFile, decifra, decifraFile, importaChiaveMia, normalizzaPrivata, salvaChiaveSulTelefono, tieniChiaveDaCopiare, togliChiaveDalTelefono } from "@/lib/cifrario";
 import { istantaneaPersonale, leggiAnagraficaLocale, salvaAnagraficaLocale } from "@/lib/anagrafica";
 import { ScadenzaField } from "@/components/scadenza-field";
@@ -415,9 +415,11 @@ function ProfilePage() {
 
 function InvitaAmico() {
   const t = useT();
+  const frame = useFondale();
   const link = "https://tritoneapp.it";
   const [src, setSrc] = useState("");
   const [nota, setNota] = useState<string | null>(null);
+  const [download, setDownload] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -432,6 +434,35 @@ function InvitaAmico() {
       live = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!frame.platform) return;
+    let live = true;
+    void leggiDownloadManuale()
+      .then((n) => {
+        if (live) setDownload(n);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [frame.platform]);
+
+  async function scaricaManuale(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    try {
+      const n = await registraDownloadManuale();
+      if (frame.platform && n != null) setDownload(n);
+    } catch {
+      /* il file si scarica lo stesso */
+    }
+    const a = document.createElement("a");
+    a.href = "/manuale-istruzioni-tritone.pdf";
+    a.download = "Manuale-istruzioni-Tritone.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   async function condividi() {
     const testo = `${t("Ti invito su Tritone.")} ${link}`;
@@ -460,6 +491,12 @@ function InvitaAmico() {
     <div className="mt-3">
       <p className="text-sm text-mist">{t("L'amico inquadra il codice con la fotocamera e apre tritoneapp.it.")}</p>
       {src ? <img src={src} alt={t("QR code di Tritone")} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-3" /> : <p className="mt-4 text-sm text-mist">{t("Preparo il codice…")}</p>}
+      <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+        <a href="/manuale-istruzioni-tritone.pdf" download="Manuale-istruzioni-Tritone.pdf" className="text-lagoon" onClick={(event) => void scaricaManuale(event)}>
+          {t("Scarica il manuale")}
+        </a>
+        {frame.platform && download != null ? <span className="text-mist">{t("{n} download", { n: download })}</span> : null}
+      </div>
       <button type="button" className="mt-4 min-h-12 w-full rounded-full bg-lagoon px-4 text-sm font-medium text-ink" onClick={() => void condividi()}>
         {t("Condividi")}
       </button>

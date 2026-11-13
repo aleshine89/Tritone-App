@@ -66,6 +66,7 @@
     "lucide-react": "^0.510.0",
     "nitro": "3.0.260610-beta",
     "nodemailer": "^7.0.13",
+    "numcodecs": "^0.3.2",
     "pg": "^8.16.3",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",

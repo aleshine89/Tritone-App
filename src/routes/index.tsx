@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, FileText, Fish, Gauge, ListChecks, Phone } from "lucide-react";
+import { CalendarClock, FileText, Fish, Gauge, ListChecks, Phone, Waves } from "lucide-react";
 import { Link, Navigate, createFileRoute } from "@tanstack/react-router";
 import { AppFrame, useFondale } from "@/components/app-frame";
 import { BancoScuola } from "@/components/banco-scuola";
@@ -179,15 +179,25 @@ function HomeBody() {
       <div className="mt-6 grid grid-cols-2 gap-3">
         {(
           [
-            { voce: "pianifica", nome: "Pianifica", riga: "Programma immersioni", icona: CalendarClock },
-            { voce: "specie", nome: "Specie", riga: "Catalogo specie marine", icona: Fish },
-            { voce: "tools", nome: "Tools", riga: "Strumenti e calcolatori", icona: Gauge },
-            { voce: "mod", nome: "MOD & CNS", riga: "Moduli e report", icona: FileText },
-            { voce: "checklist", nome: "Checklist", riga: "Controlli pre-immersione", icona: ListChecks },
-            { voce: "emergenze", nome: "Emergenze", riga: "Numeri da chiamare", icona: Phone },
-          ] as const
+            { nome: "Condizioni marine", riga: "Onde, acqua e trasparenza", icona: Waves, to: "/condizioni" as const },
+            { nome: "Pianifica", riga: "Programma immersioni", icona: CalendarClock, to: "/personale" as const, voce: "pianifica" as const },
+            { nome: "Specie", riga: "Catalogo specie marine", icona: Fish, to: "/personale" as const, voce: "specie" as const },
+            { nome: "Tools", riga: "Strumenti e calcolatori", icona: Gauge, to: "/personale" as const, voce: "tools" as const },
+            { nome: "MOD & CNS", riga: "Moduli e report", icona: FileText, to: "/personale" as const, voce: "mod" as const },
+            { nome: "Checklist", riga: "Controlli pre-immersione", icona: ListChecks, to: "/personale" as const, voce: "checklist" as const },
+            { nome: "Emergenze", riga: "Numeri da chiamare", icona: Phone, to: "/personale" as const, voce: "emergenze" as const },
+          ]
         ).map((voce) => (
-          <Link key={voce.voce} to="/personale" search={{ voce: voce.voce }} className={`flex items-center gap-3 rounded-2xl bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84] ${voce.voce === "emergenze" ? "border-2 border-brass" : "border border-line"}`}>
+          voce.to === "/condizioni" ? (
+            <Link key={voce.nome} to="/condizioni" className="flex items-center gap-3 rounded-2xl border border-line bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
+              <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium leading-tight">{t(voce.nome)}</span>
+                <span className="mt-0.5 block text-xs text-mist">{t(voce.riga)}</span>
+              </span>
+            </Link>
+          ) : (
+          <Link key={voce.nome} to="/personale" search={{ voce: voce.voce }} className={`flex items-center gap-3 rounded-2xl bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84] ${voce.voce === "emergenze" ? "border-2 border-brass" : "border border-line"}`}>
             <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
             <span className="min-w-0">
               <span className="block text-sm font-medium leading-tight">
@@ -197,6 +207,7 @@ function HomeBody() {
               <span className="mt-0.5 block text-xs text-mist">{t(voce.riga)}</span>
             </span>
           </Link>
+          )
         ))}
       </div>
 
