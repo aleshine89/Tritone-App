@@ -19,6 +19,7 @@ export type Cubo = {
   origine: number;
   fattore: number;
   campi: Record<string, Campo>;
+  elevazione: Float32Array | null;
 };
 
 const cubi = new Map<string, Promise<Cubo>>();
@@ -135,11 +136,14 @@ async function apriBase(base: string, variabili: string[]): Promise<Cubo> {
             : new Int32Array(copia.buffer);
         for (const valore of grezzo) liste.push(Number(valore));
       }
-      const [lat, lon] = await Promise.all([
+      const [lat, lon, elevazione] = await Promise.all([
         scarica(`${base}/latitude/0`).then((bytes) => numeri(bytes, "<f4") as Float32Array),
         scarica(`${base}/longitude/0`).then((bytes) => numeri(bytes, "<f4") as Float32Array),
+        meta.metadata["elevation/.zarray"]
+          ? scarica(`${base}/elevation/0`).then((bytes) => numeri(bytes, "<f4") as Float32Array)
+          : Promise.resolve(null),
       ]);
-      return { base, lat, lon, tempo: Float64Array.from(liste), origine, fattore, campi };
+      return { base, lat, lon, tempo: Float64Array.from(liste), origine, fattore, campi, elevazione };
     })();
     cubi.set(chiave, attesa);
   }
@@ -187,20 +191,28 @@ export function oreDelGiorno(cubo: Cubo, giorno: string): number[] {
   return indici;
 }
 
-async function valore(cubo: Cubo, nome: string, t: number, y: number, x: number): Promise<number | null> {
+async function valore(cubo: Cubo, nome: string, t: number, y: number, x: number, z = 0): Promise<number | null> {
   const campo = cubo.campi[nome];
   if (!campo) return null;
-  const [ct, cy, cx] = campo.chunks;
-  const url = `${cubo.base}/${nome}/${Math.floor(t / ct)}.${Math.floor(y / cy)}.${Math.floor(x / cx)}`;
+  let url: string;
+  let offset: number;
+  if (campo.chunks.length >= 4) {
+    const [ct, cz, cy, cx] = campo.chunks;
+    url = `${cubo.base}/${nome}/${Math.floor(t / ct)}.${Math.floor(z / cz)}.${Math.floor(y / cy)}.${Math.floor(x / cx)}`;
+    offset = ((((t % ct) * cz + (z % cz)) * cy + (y % cy)) * cx) + (x % cx);
+  } else {
+    const [ct, cy, cx] = campo.chunks;
+    url = `${cubo.base}/${nome}/${Math.floor(t / ct)}.${Math.floor(y / cy)}.${Math.floor(x / cx)}`;
+    offset = (t % ct) * cy * cx + (y % cy) * cx + (x % cx);
+  }
   const serie = numeri(await scarica(url), campo.dtype);
-  const offset = (t % ct) * cy * cx + (y % cy) * cx + (x % cx);
   const grezzo = Number(serie[offset]);
   if (!Number.isFinite(grezzo) || Math.abs(grezzo) > 1e6 || grezzo === campo.fill || grezzo <= -900) return null;
   return grezzo * campo.scale + campo.offset;
 }
 
-async function cellaUtile(cubo: Cubo, nome: string, t: number, y: number, x: number): Promise<{ y: number; x: number } | null> {
-  if ((await valore(cubo, nome, t, y, x)) != null) return { y, x };
+async function cellaUtile(cubo: Cubo, nome: string, t: number, y: number, x: number, z = 0): Promise<{ y: number; x: number } | null> {
+  if ((await valore(cubo, nome, t, y, x, z)) != null) return { y, x };
   const campo = cubo.campi[nome];
   if (!campo) return null;
   const cy = campo.chunks[1];
@@ -216,7 +228,7 @@ async function cellaUtile(cubo: Cubo, nome: string, t: number, y: number, x: num
     for (let xx = xMin; xx <= xMax; xx += 1) {
       const passi = Math.abs(yy - y) + Math.abs(xx - x);
       if (passi === 0 || passi > 6) continue;
-      if ((await valore(cubo, nome, t, yy, xx)) == null) continue;
+      if ((await valore(cubo, nome, t, yy, xx, z)) == null) continue;
       if (!scelta || passi < scelta.passi) scelta = { y: yy, x: xx, passi };
     }
   }
@@ -229,18 +241,19 @@ export async function leggiSerie(
   lat: number,
   lon: number,
   tempi: number[],
+  z = 0,
 ): Promise<Record<string, Array<number | null>>> {
   const y = vicino(cubo.lat, lat);
   const x = vicino(cubo.lon, lon);
   const vuoto = Object.fromEntries(variabili.map((nome) => [nome, tempi.map(() => null)]));
   if (Math.abs(cubo.lat[y] - lat) > 0.3 || Math.abs(cubo.lon[x] - lon) > 0.3 || !tempi.length) return vuoto;
   const sonda = tempi[Math.min(tempi.length - 1, Math.floor(tempi.length / 2))];
-  const cella = await cellaUtile(cubo, variabili[0], sonda, y, x);
+  const cella = await cellaUtile(cubo, variabili[0], sonda, y, x, z);
   if (!cella) return vuoto;
   const fuori: Record<string, Array<number | null>> = {};
   await Promise.all(
     variabili.map(async (nome) => {
-      fuori[nome] = await Promise.all(tempi.map((t) => valore(cubo, nome, t, cella.y, cella.x).catch(() => null)));
+      fuori[nome] = await Promise.all(tempi.map((t) => valore(cubo, nome, t, cella.y, cella.x, z).catch(() => null)));
     }),
   );
   return fuori;

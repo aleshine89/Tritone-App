@@ -57,3 +57,23 @@ export function fraseMuta(acqua: number): string {
   if (acqua >= 14) return "In acqua {g} °C: muta spessa.";
   return "In acqua {g} °C: muta stagna o molto spessa.";
 }
+
+export function faseLuna(giorno: string): number {
+  const ms = Date.parse(`${giorno}T12:00:00Z`);
+  if (!Number.isFinite(ms)) return 0;
+  const nota = Date.parse("2000-01-06T18:14:00Z");
+  const fase = (((ms - nota) / 86400000) / 29.530588853) % 1;
+  return fase < 0 ? fase + 1 : fase;
+}
+
+export function luna(giorno: string): string {
+  const giro = faseLuna(giorno);
+  if (giro < 0.03 || giro >= 0.97) return "Luna nuova: di notte è buio.";
+  if (giro < 0.22) return "Luna crescente.";
+  if (giro < 0.28) return "Primo quarto.";
+  if (giro < 0.47) return "Luna gibbosa crescente.";
+  if (giro < 0.53) return "Luna piena.";
+  if (giro < 0.72) return "Luna gibbosa calante.";
+  if (giro < 0.78) return "Ultimo quarto.";
+  return "Luna calante.";
+}
