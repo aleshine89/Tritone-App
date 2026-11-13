@@ -5,7 +5,7 @@ type InstallPrompt = Event & {
   prompt: () => Promise<void>;
 };
 
-const SW_URL = "/sw.js?v=20261006b";
+const SW_URL = "/sw.js?v=20261113a";
 
 export function RegisterPwa() {
   useEffect(() => {

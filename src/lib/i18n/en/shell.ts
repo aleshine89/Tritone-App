@@ -107,6 +107,7 @@ export const EN_SHELL: Record<string, string> = {
   "Android: apri lo stesso link in Chrome, menu, Installa app. Non usare «Aggiungi a schermata Home».": "Android: open the same link in Chrome, menu, Install app. Do not use “Add to Home screen”.",
   "Installa sul telefono": "Install on the phone",
   "Qualcosa è andato storto": "Something went wrong",
+  "L'app è stata aggiornata. Premi Ricarica per entrare.": "The app was updated. Tap Reload to get in.",
   "Ricarica": "Reload",
   "Si è verificato un errore imprevisto. Prova a ricaricare la pagina.": "An unexpected error occurred. Try reloading the page.",
   "Contesto mancante": "Missing context",

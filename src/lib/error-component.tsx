@@ -6,14 +6,36 @@ import { useT } from "@/lib/i18n";
 const FALLBACK_MESSAGE = "Si è verificato un errore imprevisto. Prova a ricaricare la pagina.";
 const RICARICA = "tritone-chunk-reload";
 
+const MESSAGGIO_AGGIORNAMENTO = "L'app è stata aggiornata. Premi Ricarica per entrare.";
+
 function errorMessage(error: unknown): string {
+  if (moduloVecchio(error)) return MESSAGGIO_AGGIORNAMENTO;
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error) return error;
   return FALLBACK_MESSAGE;
 }
 
 function moduloVecchio(error: unknown): boolean {
-  return /dynamically imported module|module script failed/i.test(errorMessage(error));
+  const text = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return /dynamically imported module|module script failed|Importing a module script failed/i.test(text);
+}
+
+async function ricaricaPulita() {
+  try {
+    if ("serviceWorker" in navigator) {
+      const registri = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registri.map((registro) => registro.unregister()));
+    }
+    if ("caches" in window) {
+      const chiavi = await caches.keys();
+      await Promise.all(chiavi.map((chiave) => caches.delete(chiave)));
+    }
+  } catch {
+    /* si ricarica comunque */
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("aggiorna", String(Date.now()));
+  window.location.replace(url.toString());
 }
 
 export function AppErrorComponent({ error }: ErrorComponentProps) {
@@ -27,7 +49,7 @@ export function AppErrorComponent({ error }: ErrorComponentProps) {
     } catch {
       return;
     }
-    window.location.reload();
+    void ricaricaPulita();
   }, [error]);
 
   return (
@@ -47,7 +69,14 @@ export function AppErrorComponent({ error }: ErrorComponentProps) {
       <button
         type="button"
         className="mt-2 min-h-11 rounded-full bg-lagoon px-5 text-sm font-medium text-ink"
-        onClick={() => window.location.reload()}
+        onClick={() => {
+          try {
+            sessionStorage.removeItem(RICARICA);
+          } catch {
+            /* ricarica lo stesso */
+          }
+          void ricaricaPulita();
+        }}
       >
         {t("Ricarica")}
       </button>

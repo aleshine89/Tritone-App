@@ -1,4 +1,4 @@
-self.smileVersion = "20261101a";
+self.smileVersion = "20261113a";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
