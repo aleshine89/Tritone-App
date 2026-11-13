@@ -520,9 +520,6 @@ function Shell({ children }: { children: ReactNode }) {
         <RigaNome conto={conto} path={path} />
         <AvvisoRinnovo />
         <PrimaVolta />
-        <a href="/tritone-aggiornamento.zip" download="tritone-aggiornamento.zip" className="mx-4 mt-3 flex min-h-12 items-center justify-center rounded-2xl bg-lagoon px-4 text-center text-sm font-medium text-ink md:mx-8">
-          Scarica aggiornamento per GitHub
-        </a>
         <main className="px-4 py-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:px-8 md:pb-12"><div key={path} className="pagina">{children}</div>{path === "/" ? <p className="mt-8 text-center text-[11px] leading-snug text-mist">Software registrato SIAE – Registro Pubblico Speciale per i programmi per elaboratore<br />TRITONE - LA VOCE DEL MARE · Numero di registrazione: D000030864 – 27/10/2026 · Numero progressivo: D000032389 · Pubblicazione: 07/10/2026</p> : null}<Copyright className={path === "/" ? "mt-3" : "mt-10"} /></main>
       </div>
       <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t-2 border-lagoon bg-deep px-2 pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] md:hidden">
