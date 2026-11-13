@@ -165,6 +165,17 @@ function istante(cubo: Cubo, indice: number): number {
   return cubo.origine + grezzo * cubo.fattore;
 }
 
+export function oraDelIndice(cubo: Cubo, indice: number, lon: number): number {
+  const quando = istante(cubo, indice);
+  if (!quando) return -1;
+  const data = new Date(quando * 1000);
+  if (lon >= 6 && lon <= 19) {
+    return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", hour: "2-digit", hourCycle: "h23" }).format(data));
+  }
+  const offset = Math.round(lon / 15) * 3600;
+  return new Date((quando + offset) * 1000).getUTCHours();
+}
+
 export function oreDelGiorno(cubo: Cubo, giorno: string): number[] {
   const inizio = Date.parse(`${giorno}T00:00:00Z`) / 1000;
   const fine = inizio + 86400;

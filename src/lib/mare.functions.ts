@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { cuboMare, cuboPerGiorno, leggiSerie, oreDelGiorno, seriePunto } from "@/lib/copernicus";
+import { oraDelIndice, cuboMare, cuboPerGiorno, leggiSerie, oreDelGiorno, seriePunto } from "@/lib/copernicus";
+import { getSql } from "@/lib/db";
 
 const ONDA = ["MEDSEA_ANALYSISFORECAST_WAV_006_017", "cmems_mod_med_wav_anfc_4.2km_PT1H-i"] as const;
 const ACQUA = ["MEDSEA_ANALYSISFORECAST_PHY_006_013", "cmems_mod_med_phy-tem_anfc_4.2km-2D_PT1H-m"] as const;
@@ -14,7 +15,7 @@ const DOI = ["10.48670/mds-00373", "10.48670/mds-00359", "10.48670/moi-00279", "
 export type GiornoMare = {
   giorno: string;
   punteggio: number | null;
-  giudizio: "calmo" | "mosso" | "molto" | null;
+  giudizio: "entra" | "limite" | "no" | null;
   onda: number | null;
   periodo: number | null;
   direzione: number | null;
@@ -24,6 +25,8 @@ export type GiornoMare = {
   secchiDel: string | null;
   secchiNota: "satellite" | "assente" | "previsione";
   vista: number | null;
+  finestraDa: number | null;
+  finestraA: number | null;
 };
 
 export type LetturaMare = {
@@ -73,9 +76,74 @@ function punteggioOnda(metri: number): number {
 }
 
 function giudizioDi(voto: number): GiornoMare["giudizio"] {
-  if (voto >= 7.5) return "calmo";
-  if (voto >= 4.5) return "mosso";
-  return "molto";
+  if (voto >= 7.2) return "entra";
+  if (voto >= 4.8) return "limite";
+  return "no";
+}
+
+function scala(metri: number, punti: [number, number][]): number {
+  if (metri <= punti[0][0]) return punti[0][1];
+  for (let i = 1; i < punti.length; i += 1) {
+    const [prima, votoPrima] = punti[i - 1];
+    const [dopo, votoDopo] = punti[i];
+    if (metri <= dopo) {
+      const tratto = (metri - prima) / (dopo - prima);
+      return votoPrima + (votoDopo - votoPrima) * tratto;
+    }
+  }
+  return punti[punti.length - 1][1];
+}
+
+function punteggioCorrente(metri: number): number {
+  return scala(metri, [
+    [0, 9.6],
+    [0.15, 8.4],
+    [0.3, 7],
+    [0.5, 5],
+    [0.8, 3.2],
+    [1.2, 1.6],
+  ]);
+}
+
+function punteggioVista(metri: number): number {
+  return scala(metri, [
+    [1, 2],
+    [3, 4.2],
+    [5, 6.4],
+    [8, 8],
+    [15, 9.4],
+    [25, 9.8],
+  ]);
+}
+
+function chiudiGiudizio(giorno: GiornoMare) {
+  const pezzi: number[] = [];
+  if (giorno.onda != null) pezzi.push(punteggioOnda(giorno.onda));
+  if (giorno.corrente != null) pezzi.push(punteggioCorrente(giorno.corrente));
+  if (giorno.vista != null) pezzi.push(punteggioVista(giorno.vista));
+  if (!pezzi.length) {
+    giorno.punteggio = null;
+    giorno.giudizio = null;
+    return;
+  }
+  const voto = Math.round((pezzi.reduce((somma, valore) => somma + valore, 0) / pezzi.length) * 10) / 10;
+  giorno.punteggio = voto;
+  giorno.giudizio = giudizioDi(voto);
+}
+
+function finestraCalma(ore: number[], altezze: Array<number | null>): { da: number; a: number } | null {
+  let meglio: { da: number; a: number; media: number } | null = null;
+  for (let i = 0; i < ore.length - 1; i += 1) {
+    const da = ore[i];
+    const a = ore[i + 1];
+    if (da < 7 || a > 19 || a <= da || a - da > 3) continue;
+    const prima = altezze[i];
+    const dopo = altezze[i + 1];
+    if (prima == null || dopo == null) continue;
+    const valore = (prima + dopo) / 2;
+    if (!meglio || valore < meglio.media) meglio = { da, a, media: valore };
+  }
+  return meglio ? { da: meglio.da, a: meglio.a } : null;
 }
 
 function fattoreOnda(metri: number | null): number {
@@ -179,7 +247,7 @@ export const leggiMare = createServerFn({ method: "POST" })
     return { lat, lon };
   })
   .handler(async ({ data }): Promise<LetturaMare> => {
-    const chiave = `${data.lat.toFixed(2)},${data.lon.toFixed(2)},${giornoRoma(0)}`;
+    const chiave = `2|${data.lat.toFixed(2)},${data.lon.toFixed(2)},${giornoRoma(0)}`;
     const tenuto = memoria.get(chiave);
     if (tenuto && Date.now() - tenuto.at < 3 * 60 * 60 * 1000) return tenuto.lettura;
 
@@ -201,11 +269,12 @@ export const leggiMare = createServerFn({ method: "POST" })
       cursore += ore.length;
       const picco = massimo(altezze);
       const onda = picco ? arrotonda(picco.valore, 1) : null;
-      const voto = onda == null ? null : punteggioOnda(onda);
+      const oreLocali = ore.map((indice) => oraDelIndice(onde, indice, data.lon));
+      const finestra = finestraCalma(oreLocali, altezze);
       giorni.push({
         giorno: giorniIso[i],
-        punteggio: voto,
-        giudizio: voto == null ? null : giudizioDi(voto),
+        punteggio: null,
+        giudizio: null,
         onda,
         periodo: picco ? arrotonda(periodi[picco.indice], 0) : null,
         direzione: picco && direzioni[picco.indice] != null ? Math.round(Number(direzioni[picco.indice])) : null,
@@ -215,6 +284,8 @@ export const leggiMare = createServerFn({ method: "POST" })
         secchiDel: null,
         secchiNota: i > 2 ? "previsione" : "assente",
         vista: null,
+        finestraDa: finestra?.da ?? null,
+        finestraA: finestra?.a ?? null,
       });
     }
 
@@ -318,6 +389,8 @@ export const leggiMare = createServerFn({ method: "POST" })
       /* la corrente manca, il resto resta */
     }
 
+    giorni.forEach(chiudiGiudizio);
+
     const conVoto = giorni.filter((giorno) => giorno.punteggio != null);
     const migliore = conVoto.reduce<GiornoMare | null>((scelto, giorno) => {
       if (!scelto || (giorno.punteggio ?? 0) > (scelto.punteggio ?? 0)) return giorno;
@@ -333,4 +406,104 @@ export const leggiMare = createServerFn({ method: "POST" })
     };
     if (lettura.copertura) memoria.set(chiave, { at: Date.now(), lettura });
     return lettura;
+  });
+
+export type ContestoMare = {
+  metri: number | null;
+  livello: string;
+  uscita: "riva" | "barca" | null;
+  luogo: string;
+  giorno: string;
+};
+
+function limiteBrevetto(ente: string, livello: string, titolo: string): { metri: number; etichetta: string } | null {
+  const text = `${ente} ${livello} ${titolo}`.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  if (!text.trim()) return null;
+  const etichetta = [ente, livello].filter(Boolean).join(" ").trim() || titolo;
+  if (/\b(divemaster|dive master|istruttore|instructor|owsi|msdt)\b/.test(text)) return { metri: 40, etichetta };
+  if (/(\*\*\*|3\s*stelle|tre stelle|terzo grado|\bp3\b|three star)/.test(text)) return { metri: 40, etichetta };
+  if (/\b(advanced|aowd|aow|rescue|master scuba)\b/.test(text)) return { metri: 30, etichetta };
+  if (/(\*\*|2\s*stelle|due stelle|secondo grado|\bp2\b|two star)/.test(text)) return { metri: 30, etichetta };
+  if (/\b(discover|try dive|battesimo)\b/.test(text) || /\bscuba diver\b/.test(text)) return { metri: 12, etichetta };
+  if (/(\*|1\s*stella|una stella|primo grado|\bp1\b|one star)/.test(text)) return { metri: 18, etichetta };
+  if (/\b(open water|owd)\b/.test(text)) return { metri: 18, etichetta };
+  return null;
+}
+
+function daRiva(valore: boolean | string | null): "riva" | "barca" | null {
+  if (valore === true || valore === "t" || valore === "true") return "barca";
+  if (valore === false || valore === "f" || valore === "false") return "riva";
+  return null;
+}
+
+export const contestoMare = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<ContestoMare> => {
+    const vuoto: ContestoMare = { metri: null, livello: "", uscita: null, luogo: "", giorno: "" };
+    try {
+      const sql = await getSql();
+      const brevetti = await sql<{ ente: string; livello: string; titolo: string }>`
+        select ente, livello, titolo from brevetti where user_id = ${context.userId} order by id desc
+      `;
+      let scelto: { metri: number; etichetta: string } | null = null;
+      for (const riga of brevetti) {
+        const limite = limiteBrevetto(riga.ente, riga.livello, riga.titolo);
+        if (limite && (!scelto || limite.metri > scelto.metri)) scelto = limite;
+      }
+      const club = await sql<{ mezzo: boolean | string | null }>`
+        select c.mezzo_nautico as mezzo
+        from profiles p
+        left join club c on c.id = p.club_id
+        where p.user_id = ${context.userId}
+      `;
+      const propria = await sql<{ giorno: string; luogo: string }>`
+        select u.data::text as giorno, coalesce(nullif(u.punto, ''), u.localita) as luogo
+        from uscita_righe r
+        join uscite u on u.id = r.uscita_id
+        where r.user_id = ${context.userId}
+          and u.data >= current_date
+          and u.data <= current_date + 4
+          and u.localita <> ''
+        order by u.data, u.id
+        limit 1
+      `;
+      const delCentro = propria[0]
+        ? []
+        : await sql<{ giorno: string; luogo: string }>`
+            select u.data::text as giorno, coalesce(nullif(u.punto, ''), u.localita) as luogo
+            from uscite u
+            join profiles p on p.club_id = u.club_id
+            where p.user_id = ${context.userId}
+              and u.data >= current_date
+              and u.data <= current_date + 4
+              and u.localita <> ''
+            order by u.data, u.id
+            limit 1
+          `;
+      const viaggio = propria[0] || delCentro[0]
+        ? []
+        : await sql<{ giorno: string; luogo: string }>`
+            select v.dal::text as giorno,
+              coalesce(nullif(v.ospite_nome, ''), nullif(ospite.citta, ''), nullif(ospite.nome, ''), nullif(casa.citta, ''), casa.nome) as luogo
+            from viaggio_persone p
+            join viaggi v on v.id = p.viaggio_id
+            left join club ospite on ospite.id = v.ospite_club_id
+            left join club casa on casa.id = v.club_id
+            where p.user_id = ${context.userId}
+              and v.al >= current_date
+              and v.dal <= current_date + 4
+            order by v.dal
+            limit 1
+          `;
+      const appuntamento = propria[0] ?? delCentro[0] ?? viaggio[0];
+      return {
+        metri: scelto?.metri ?? null,
+        livello: scelto?.etichetta ?? "",
+        uscita: daRiva(club[0]?.mezzo ?? null),
+        luogo: appuntamento?.luogo?.trim() ?? "",
+        giorno: appuntamento?.giorno?.slice(0, 10) ?? "",
+      };
+    } catch {
+      return vuoto;
+    }
   });

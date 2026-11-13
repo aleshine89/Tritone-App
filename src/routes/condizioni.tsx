@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Eye, Navigation, Thermometer, Waves } from "lucide-react";
 import { AppFrame } from "@/components/app-frame";
 import { DiveMap } from "@/components/dive-map";
-import { cercaCosta, leggiMare, type GiornoMare, type LetturaMare, type LuogoCosta } from "@/lib/mare.functions";
+import { cercaCosta, contestoMare, leggiMare, type ContestoMare, type GiornoMare, type LetturaMare, type LuogoCosta } from "@/lib/mare.functions";
 import { messaggioErrore, useT } from "@/lib/i18n";
+import { fraseMuta, sole } from "@/lib/sole";
 
 export const Route = createFileRoute("/condizioni")({ component: Page });
 
@@ -40,10 +41,11 @@ function Condizioni() {
   const [lon, setLon] = useState("");
   const [scelto, setScelto] = useState<string | null>(null);
   const [lettura, setLettura] = useState<LetturaMare | null>(null);
+  const [contesto, setContesto] = useState<ContestoMare | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
   const [attesa, setAttesa] = useState(false);
 
-  async function leggi(puntoLat: number, puntoLon: number, etichetta: string) {
+  async function leggi(puntoLat: number, puntoLon: number, etichetta: string, giornoPreferito?: string) {
     setNome(etichetta);
     setLat(puntoLat.toFixed(5));
     setLon(puntoLon.toFixed(5));
@@ -54,7 +56,8 @@ function Condizioni() {
     try {
       const esito = await leggiMare({ data: { lat: puntoLat, lon: puntoLon } });
       setLettura(esito);
-      setScelto(esito.giorni[2]?.giorno ?? esito.giorni[0]?.giorno ?? null);
+      const trovato = giornoPreferito && esito.giorni.some((voce) => voce.giorno === giornoPreferito);
+      setScelto(trovato ? giornoPreferito : esito.giorni[2]?.giorno ?? esito.giorni[0]?.giorno ?? null);
     } catch (reason) {
       setLettura(null);
       setErrore(messaggioErrore(reason, "Non riesco a leggere il mare adesso."));
@@ -62,6 +65,25 @@ function Condizioni() {
       setAttesa(false);
     }
   }
+
+  useEffect(() => {
+    let live = true;
+    void contestoMare()
+      .then(async (ctx) => {
+        if (!live) return;
+        setContesto(ctx);
+        if (!ctx.luogo) return;
+        const lista = await cercaCosta({ data: { q: ctx.luogo } });
+        if (!live || !lista[0]) return;
+        await leggi(lista[0].lat, lista[0].lon, lista[0].nome, ctx.giorno);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // Una volta, all'apertura: se c'è un'uscita o un viaggio, il mare si apre lì.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function scegliTesto() {
     const coordinate = testo.trim().match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/);
@@ -159,6 +181,8 @@ function Condizioni() {
           </div>
           <p className="mt-1 text-center text-[11px] text-brass">{t("Il pallino segna il giorno migliore.")}</p>
           <Dettaglio giorno={giorno} />
+          <Cielo lat={lat} lon={lon} giorno={giorno} />
+          <FraseTua giorno={giorno} contesto={contesto} />
         </>
       ) : null}
 
@@ -175,16 +199,16 @@ function Condizioni() {
 }
 
 function coloreVoto(giudizio: GiornoMare["giudizio"]): string {
-  if (giudizio === "calmo") return "text-foam";
-  if (giudizio === "mosso") return "text-brass";
-  if (giudizio === "molto") return "text-danger";
+  if (giudizio === "entra") return "text-foam";
+  if (giudizio === "limite") return "text-brass";
+  if (giudizio === "no") return "text-danger";
   return "text-mist";
 }
 
 function Testata({ giorno, nome }: { giorno: GiornoMare; nome: string }) {
   const t = useT();
   const colore = giorno.giudizio ? coloreVoto(giorno.giudizio) : "text-mist";
-  const frase = giorno.giudizio === "calmo" ? t("Mare calmo") : giorno.giudizio === "mosso" ? t("Mare mosso") : giorno.giudizio === "molto" ? t("Mare molto mosso") : t("Dato mancante");
+  const frase = giorno.giudizio === "entra" ? t("Si entra") : giorno.giudizio === "limite" ? t("Al limite") : giorno.giudizio === "no" ? t("Meglio no") : t("Dato mancante");
   const voto = giorno.punteggio ?? 0;
   return (
     <section className="relative mt-4 overflow-hidden rounded-[28px] border border-line bg-deep px-4 py-5 shadow-[0_22px_40px_-24px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.14)]">
@@ -202,6 +226,7 @@ function Testata({ giorno, nome }: { giorno: GiornoMare; nome: string }) {
         <div className="min-w-0">
           {nome ? <p className="truncate text-sm text-mist">{nome}</p> : null}
           <p className={`text-2xl leading-tight ${colore}`}>{frase}</p>
+          <p className="mt-1 text-[11px] leading-snug text-mist">{t("Il voto mette insieme onda, corrente e visibilità. Non è un via libera.")}</p>
           <p className="mt-1 text-sm text-mist">{giorno.onda != null ? t("onda {m} m", { m: giorno.onda }) : t("onda non disponibile")}</p>
           {giorno.vista != null ? <p className="mt-2 font-display text-4xl leading-none text-lagoon drop-shadow-[0_6px_12px_rgba(94,234,212,0.35)]">~{giorno.vista} m</p> : null}
           <p className="mt-1 text-[11px] text-mist">{t("Stima: parte dal satellite e cambia con l'onda prevista. Non è ciò che vedi sott'acqua.")}</p>
@@ -237,6 +262,34 @@ function Dettaglio({ giorno }: { giorno: GiornoMare }) {
       <p className="mt-2 text-[11px] leading-relaxed text-mist">{t("Nei giorni avanti è una stima, non una misura.")}</p>
     </>
   );
+}
+
+function Cielo({ lat, lon, giorno }: { lat: string; lon: string; giorno: GiornoMare }) {
+  const t = useT();
+  const latN = Number(lat);
+  const lonN = Number(lon);
+  const luce = Number.isFinite(latN) && Number.isFinite(lonN) && lat !== "" ? sole(latN, lonN, giorno.giorno) : null;
+  return (
+    <div className="mt-3 space-y-1 text-sm text-mist">
+      {giorno.finestraDa != null && giorno.finestraA != null ? <p>{t("L'onda è più bassa tra le {da} e le {a}.", { da: giorno.finestraDa, a: giorno.finestraA })}</p> : null}
+      {luce ? <p>{t("Il sole sorge alle {sorge} e tramonta alle {tramonta}.", { sorge: luce.sorge, tramonta: luce.tramonta })}</p> : null}
+      {giorno.acqua != null ? <p>{t(fraseMuta(giorno.acqua), { g: giorno.acqua })}</p> : null}
+    </div>
+  );
+}
+
+function FraseTua({ giorno, contesto }: { giorno: GiornoMare; contesto: ContestoMare | null }) {
+  const t = useT();
+  if (!contesto || giorno.onda == null) return null;
+  const pezzi: string[] = [];
+  if (contesto.uscita === "riva" && giorno.onda >= 0.8) pezzi.push(t("Onda {m} m: da riva è meglio no.", { m: giorno.onda }));
+  else if (contesto.uscita === "barca" && giorno.onda >= 0.8 && giorno.giudizio !== "no") pezzi.push(t("Onda {m} m: da riva sarebbe alta, da barca si può entrare. Non è un via libera.", { m: giorno.onda }));
+  else if (contesto.uscita === "barca" && giorno.giudizio === "no") pezzi.push(t("Anche da barca oggi è meglio no. Non è un via libera."));
+  if (contesto.metri != null && contesto.metri <= 18 && (giorno.giudizio === "limite" || giorno.giudizio === "no")) {
+    pezzi.push(t("Il brevetto arriva a {m} m: resta nei tuoi limiti.", { m: contesto.metri }));
+  }
+  if (!pezzi.length) return null;
+  return <p className="mt-3 rounded-2xl border border-brass/50 bg-deep px-3 py-3 text-sm leading-relaxed text-brass">{pezzi.join(" ")}</p>;
 }
 
 function Cella({ icona: Icon, titolo, valore, nota }: { icona: typeof Waves; titolo: string; valore: string; nota?: string }) {
