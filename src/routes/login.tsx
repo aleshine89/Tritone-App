@@ -85,27 +85,17 @@ function LoginCard() {
           password,
           name: email.split("@")[0] || "Subacqueo",
         });
-        if (created.error) throw new Error(created.error.message || "Registrazione non riuscita.");
-        try {
-          await chiediMail(email.trim());
-          setInviata(true);
-        } catch (reason) {
-          setError(humanAuth(reason instanceof Error ? reason.message : "La mail non è partita."));
+        if (created.error && !accountGiaEsiste(created.error.message || "")) {
+          throw new Error(created.error.message || "Registrazione non riuscita.");
         }
-        setAvviso("conferma");
+        await apriConferma();
         return;
       }
       const signed = await authClient.signIn.email({ email: email.trim(), password });
       if (signed.error) {
         const message = signed.error.message || "Accesso non riuscito.";
         if (/verif/i.test(message)) {
-          try {
-            await chiediMail(email.trim());
-            setInviata(true);
-          } catch (reason) {
-            setError(humanAuth(reason instanceof Error ? reason.message : "La mail non è partita."));
-          }
-          setAvviso("conferma");
+          await apriConferma();
           return;
         }
         throw new Error(message);
@@ -117,6 +107,17 @@ function LoginCard() {
       setError(humanAuth(reason instanceof Error ? reason.message : "Accesso non riuscito."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function apriConferma() {
+    setInviata(true);
+    setAvviso("conferma");
+    try {
+      await chiediMail(email.trim());
+    } catch (reason) {
+      setInviata(false);
+      setError(humanAuth(reason instanceof Error ? reason.message : "La mail non è partita."));
     }
   }
 
@@ -182,11 +183,18 @@ function LoginCard() {
       ? t("L'invio non è riuscito. L'account resta fermo finché non parte il link.")
       : avviso === "password"
         ? t("Se l'account {email} esiste, il link per la nuova password è in arrivo. Guarda anche nello spam. Vale un'ora.", { email: email.trim() })
-        : t("Apri il link inviato a {email}. Serve solo la prima volta, per creare l'account. Dopo, entri con mail e password. Guarda anche nello spam. Vale un'ora.", { email: email.trim() });
+        : t("Mail inviata a {email}. Controlla la posta, anche lo spam, e apri il link per confermare l'account. Senza quel link non si entra. Vale un'ora. Non premere di nuovo Crea account: l'account c'è già.", { email: email.trim() });
     return (
       <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-4 py-10 text-foam">
         <h1 className="text-3xl leading-none">{titolo}</h1>
+        {avviso === "conferma" && inviata ? (
+          <p className="mt-4 rounded-2xl border border-lagoon bg-deep px-4 py-4 text-lg leading-snug">{t("Controlla la posta e conferma l'account.")}</p>
+        ) : null}
+        <p className="mt-4 break-all text-xl leading-tight">{email.trim()}</p>
         <p className="mt-4 text-base leading-relaxed">{testo}</p>
+        {avviso === "conferma" && inviata ? (
+          <p className="mt-4 text-base leading-relaxed">{t("Se il link è scaduto, torna indietro, scegli Ho già l'accesso e premi Entra con la stessa email e la stessa password. Parte un link nuovo. Non premere Crea account.")}</p>
+        ) : null}
         {error ? <p className="mt-4 text-sm text-brass">{t(error)}</p> : null}
         <button
           type="button"
@@ -387,6 +395,11 @@ function LoginCard() {
       <Copyright className="mx-auto mt-10 max-w-5xl" />
     </main>
   );
+}
+
+function accountGiaEsiste(message: string): boolean {
+  const text = message.toLowerCase();
+  return text.includes("already") || text.includes("esist");
 }
 
 async function chiediRecupero(email: string) {
