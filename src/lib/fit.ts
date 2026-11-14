@@ -391,7 +391,11 @@ function finestraDi(blocco: Blocco): { start: number; end: number } | null {
 function profiloDi(campioni: Campione[], start: number, end: number): PuntoProfilo[] {
   const punti = campioni
     .filter((campione) => campione.ts >= start - 1 && campione.ts <= end + 1)
-    .map((campione) => ({ t: Math.max(0, Math.round(campione.ts - start)), d: Math.round(campione.profondita * 100) / 100 }))
+    .map((campione) => {
+      const punto: PuntoProfilo = { t: Math.max(0, Math.round(campione.ts - start)), d: Math.round(campione.profondita * 100) / 100 };
+      if (campione.temp != null) punto.c = Math.round(campione.temp * 10) / 10;
+      return punto;
+    })
     .sort((a, b) => a.t - b.t);
   if (punti.length <= MAX_PUNTI) return punti;
   const out: PuntoProfilo[] = [];

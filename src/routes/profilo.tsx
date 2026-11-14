@@ -490,7 +490,7 @@ function InvitaAmico() {
   return (
     <div className="mt-3">
       <p className="text-sm text-mist">{t("L'amico inquadra il codice con la fotocamera e apre tritoneapp.it.")}</p>
-      {src ? <img src={src} alt={t("QR code di Tritone")} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-3 shadow-[0_18px_30px_-16px_rgba(0,0,0,0.85),0_0_0_1px_rgba(94,234,212,0.35)]" /> : <p className="mt-4 text-sm text-mist">{t("Preparo il codice…")}</p>}
+      {src ? <img src={src} alt={t("QR code di Tritone")} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-3" /> : <p className="mt-4 text-sm text-mist">{t("Preparo il codice…")}</p>}
       <div className="mt-4 flex items-center justify-center gap-3 text-sm">
         <a href="/manuale-istruzioni-tritone.pdf" download="Manuale-istruzioni-Tritone.pdf" className="text-lagoon" onClick={(event) => void scaricaManuale(event)}>
           {t("Scarica il manuale")}

@@ -1,4 +1,4 @@
-export type PuntoProfilo = { t: number; d: number };
+export type PuntoProfilo = { t: number; d: number; c?: number };
 
 export type UddfRiga = {
   data: string;
@@ -140,7 +140,7 @@ export function scriviUddf(righe: UddfRiga[]): string {
       riga.buddy ? `<buddy><name>${xml(riga.buddy)}</name></buddy>` : "",
     ].join("");
     const samples = riga.profilo.length
-      ? `<samples>${riga.profilo.map((punto) => `<waypoint><depth>${punto.d}</depth><divetime>${punto.t}</divetime></waypoint>`).join("")}</samples>`
+      ? `<samples>${riga.profilo.map((punto) => `<waypoint><depth>${punto.d}</depth><divetime>${punto.t}</divetime>${punto.c == null ? "" : `<temperature>${(punto.c + 273.15).toFixed(2)}</temperature>`}</waypoint>`).join("")}</samples>`
       : "";
     const dopo = [
       riga.profondita ? `<greatestdepth>${xml(riga.profondita)}</greatestdepth>` : "",
@@ -273,7 +273,13 @@ function puntiDi(samples: string): PuntoProfilo[] {
     const d = numero(primo(waypoint.inner, "depth"));
     const t = numero(primo(waypoint.inner, "divetime"));
     if (d == null || t == null || d < 0 || d > 400 || t < 0 || t > 200_000) continue;
-    punti.push({ t: Math.round(t), d: Math.round(d * 100) / 100 });
+    const punto: PuntoProfilo = { t: Math.round(t), d: Math.round(d * 100) / 100 };
+    const raw = numero(primo(waypoint.inner, "temperature"));
+    if (raw != null) {
+      const gradi = raw > 150 ? raw - 273.15 : raw;
+      if (gradi >= -2 && gradi <= 45) punto.c = Math.round(gradi * 10) / 10;
+    }
+    punti.push(punto);
   }
   punti.sort((a, b) => a.t - b.t);
   if (punti.length <= MAX_PUNTI) return punti;

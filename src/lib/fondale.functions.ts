@@ -3730,7 +3730,10 @@ function profiloDi(value: unknown): PuntoProfilo[] {
     const t = Number((item as { t?: unknown }).t);
     const d = Number((item as { d?: unknown }).d);
     if (!Number.isFinite(t) || !Number.isFinite(d) || t < 0 || t > 200_000 || d < 0 || d > 400) continue;
-    punti.push({ t: Math.round(t), d: Math.round(d * 100) / 100 });
+    const punto: PuntoProfilo = { t: Math.round(t), d: Math.round(d * 100) / 100 };
+    const c = Number((item as { c?: unknown }).c);
+    if (Number.isFinite(c) && c >= -2 && c <= 45) punto.c = Math.round(c * 10) / 10;
+    punti.push(punto);
   }
   return punti;
 }

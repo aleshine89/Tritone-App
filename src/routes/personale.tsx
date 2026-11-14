@@ -111,6 +111,8 @@ function Area() {
   const photoRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scanCardRef = useRef<HTMLInputElement>(null);
+  const galleriaCardRef = useRef<HTMLInputElement>(null);
+  const fileCardRef = useRef<HTMLInputElement>(null);
   const ritaglio = useRitaglioDocumento();
 
   async function load() {
@@ -471,13 +473,39 @@ function Area() {
               {t("Aggiungi brevetto")}
             </button>
             <button type="button" disabled={leggendo} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => scanCardRef.current?.click()}>
+              {t("Scatta foto")}
+            </button>
+            <button type="button" disabled={leggendo} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => galleriaCardRef.current?.click()}>
+              {t("Foto dal telefono")}
+            </button>
+            <button type="button" disabled={leggendo} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => fileCardRef.current?.click()}>
               {t("Scansiona file")}
             </button>
             <input
               ref={scanCardRef}
               type="file"
-              accept="image/*,application/pdf"
+              accept="image/*"
               capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                void onScanCard(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={galleriaCardRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                void onScanCard(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={fileCardRef}
+              type="file"
+              accept="image/*,application/pdf"
               className="hidden"
               onChange={(event) => {
                 void onScanCard(event.target.files?.[0]);
@@ -858,6 +886,8 @@ function DocBlock({
   const photoRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scanRef = useRef<HTMLInputElement>(null);
+  const galleriaRef = useRef<HTMLInputElement>(null);
+  const fileListaRef = useRef<HTMLInputElement>(null);
   const ritaglioDoc = useRitaglioDocumento();
   const visto = items?.find((item) => item.id === vistaId) ?? null;
 
@@ -1080,14 +1110,40 @@ function DocBlock({
             {addLabel}
           </button>
           <button type="button" disabled={leggendoDoc} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => scanRef.current?.click()}>
+            {t("Scatta foto")}
+          </button>
+          <button type="button" disabled={leggendoDoc} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => galleriaRef.current?.click()}>
+            {t("Foto dal telefono")}
+          </button>
+          <button type="button" disabled={leggendoDoc} className="min-h-11 rounded-full bg-tide px-4 text-sm font-medium text-white disabled:opacity-60" onClick={() => fileListaRef.current?.click()}>
             {t("Scansiona file")}
           </button>
         </div>
         <input
           ref={scanRef}
           type="file"
-          accept="image/*,application/pdf"
+          accept="image/*"
           capture="environment"
+          className="hidden"
+          onChange={(event) => {
+            void onScan(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <input
+          ref={galleriaRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            void onScan(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <input
+          ref={fileListaRef}
+          type="file"
+          accept="image/*,application/pdf"
           className="hidden"
           onChange={(event) => {
             void onScan(event.target.files?.[0]);

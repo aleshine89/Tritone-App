@@ -403,23 +403,27 @@ export function LetturaInCorso() {
 
 function SceltaFile({ leggendo, onFile }: { leggendo: boolean; onFile: (file: File | undefined) => void }) {
   const t = useT();
-  const ref = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const galleria = useRef<HTMLInputElement>(null);
+  const file = useRef<HTMLInputElement>(null);
+  function preso(event: { target: HTMLInputElement }) {
+    onFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
   return (
-    <div>
-      <button type="button" disabled={leggendo} className={fileBtn} onClick={() => ref.current?.click()}>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" disabled={leggendo} className={fileBtn} onClick={() => camera.current?.click()}>
+        {t("Scatta foto")}
+      </button>
+      <button type="button" disabled={leggendo} className={fileBtn} onClick={() => galleria.current?.click()}>
+        {t("Foto dal telefono")}
+      </button>
+      <button type="button" disabled={leggendo} className={fileBtn} onClick={() => file.current?.click()}>
         {t("Scansiona file")}
       </button>
-      <input
-        ref={ref}
-        type="file"
-        accept="image/*,application/pdf"
-        capture="environment"
-        className="hidden"
-        onChange={(event) => {
-          onFile(event.target.files?.[0]);
-          event.target.value = "";
-        }}
-      />
+      <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={preso} />
+      <input ref={galleria} type="file" accept="image/*" className="hidden" onChange={preso} />
+      <input ref={file} type="file" accept="image/*,application/pdf" className="hidden" onChange={preso} />
     </div>
   );
 }

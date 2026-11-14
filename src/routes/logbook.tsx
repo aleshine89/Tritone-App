@@ -697,7 +697,7 @@ function Logbook() {
                       }}
                     />
                   </label>
-                  {draft.profilo.length > 1 ? <div className="mt-3 h-16"><CurvaProfilo punti={draft.profilo} /></div> : null}
+                  {draft.profilo.length > 1 ? <div className="relative mt-3 h-16 overflow-hidden"><CurvaProfilo punti={draft.profilo} /></div> : null}
                   {fileScelte ? (
                     <ul className="mt-3 grid gap-2">
                       {fileScelte.map((riga, index) => (
@@ -1305,21 +1305,6 @@ function nomeSito(nome: string, t: (it: string, vars?: Record<string, string | n
   return nome === "Sito non indicato" ? t(nome) : nome;
 }
 
-function ColonnaImmersione({ profondita, temperatura, foto }: { profondita: string; temperatura: string; foto: string }) {
-  const metri = Number(String(profondita).replace(",", "."));
-  const fondo = Number.isFinite(metri) && metri > 0 ? Math.min(92, Math.max(28, (metri / 40) * 100)) : 46;
-  return (
-    <div
-      className="relative mt-4 h-40 overflow-hidden rounded-[24px] border border-lagoon/30 shadow-[inset_0_-24px_32px_rgba(0,0,0,0.45),0_16px_28px_-18px_rgba(0,0,0,0.9)]"
-      style={{ background: `linear-gradient(180deg, rgba(94,234,212,0.42) 0%, rgba(12,42,52,0.92) ${fondo}%, #07141c 100%)` }}
-    >
-      {foto ? <img src={foto} alt="" className="absolute right-3 top-3 size-16 rounded-2xl object-cover shadow-[0_10px_18px_-10px_rgba(0,0,0,0.9)]" /> : null}
-      <p className="absolute bottom-3 left-4 font-display text-4xl leading-none text-foam">{Number.isFinite(metri) && metri > 0 ? `${metri} m` : "—"}</p>
-      {temperatura ? <p className="absolute bottom-4 right-4 text-sm text-foam">{temperatura} °C</p> : null}
-    </div>
-  );
-}
-
 function VistaImmersione({
   draft,
   shots,
@@ -1405,7 +1390,6 @@ function VistaImmersione({
   return (
     <section className="rounded-card border border-line bg-surface p-4">
       <h2 id="logbook-finestra" className="text-2xl">{sito}</h2>
-      <ColonnaImmersione profondita={draft.profondita} temperatura={draft.temperatura} foto={preview || shots[0]?.data || ""} />
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {righe.map((riga) => (
           <div key={riga.etichetta}>
@@ -1421,7 +1405,7 @@ function VistaImmersione({
         ) : null}
       </dl>
       {draft.profilo.length > 1 ? (
-        <div className="mt-4 h-24">
+        <div className="relative mt-4 h-24 overflow-hidden">
           <CurvaProfilo punti={draft.profilo} />
         </div>
       ) : null}

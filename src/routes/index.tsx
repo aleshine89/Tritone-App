@@ -117,50 +117,46 @@ function HomeBody() {
       ) : null}
       <BannerViaggi />
 
-      <section className="relative mt-5 overflow-hidden rounded-[28px] border border-lagoon/30 bg-deep p-4 shadow-[0_22px_40px_-24px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.14)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_90%_at_0%_0%,rgba(94,234,212,0.16),transparent_55%)]" />
-        <div className="relative flex items-stretch gap-4">
-          <FotoProfilo />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Link to="/logbook" search={{ nuova: anno && anno.immersioni === 0 ? 1 : undefined, condivisione: undefined }} className="block py-1">
-              <span className="text-sm text-mist">{t("Ore in acqua")}</span>
-              <span className="mt-1 block font-display leading-none">
-                <span className="text-5xl">{anno ? oreNumero(anno.minuti) : "—"}</span>
-                {anno ? <span className="ml-1 text-2xl">h</span> : null}
-              </span>
-              <span className="mt-3 block text-sm text-mist">{t("Media")}</span>
-              <span className="mt-1 block font-display text-3xl leading-none">{anno?.media ? `${anno.media} m` : "—"}</span>
-            </Link>
-            <div className="mt-4 flex items-center gap-3 border-t border-line/80 pt-3">
-              <div className="relative size-16 shrink-0">
-                <svg viewBox="0 0 36 36" className="size-16 -rotate-90" aria-hidden>
-                  <circle cx="18" cy="18" r="13.5" fill="none" className="text-line" stroke="currentColor" strokeWidth="3.2" />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="13.5"
-                    fill="none"
-                    className="text-lagoon"
-                    stroke="currentColor"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    pathLength="100"
-                    strokeDasharray={`${anno ? Math.min(100, Math.round((anno.immersioni / 20) * 100)) : 0} 100`}
-                    style={{ filter: "drop-shadow(0 0 3px currentColor)" }}
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-medium leading-none text-foam">{anno?.immersioni ?? 0}</span>
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg leading-none text-foam">{t("{n} di {totale}", { n: anno?.immersioni ?? 0, totale: 20 })}</p>
-                <p className="mt-1 text-sm text-mist">{t("immersioni")}</p>
-                {anno?.massima ? <p className="mt-1 text-xs text-brass">{t("massima {m} m", { m: anno.massima })}</p> : null}
-              </div>
-            </div>
-          </div>
+      <div className="mt-5 flex items-stretch gap-4 rounded-card border border-line bg-deep p-3">
+        <FotoProfilo />
+        <Link to="/logbook" search={{ nuova: anno && anno.immersioni === 0 ? 1 : undefined, condivisione: undefined }} className="flex min-w-0 flex-1 flex-col justify-center py-1">
+          <span className="text-sm text-mist">{t("Ore in acqua")}</span>
+          <span className="mt-1 font-display leading-none">
+            <span className="text-5xl">{anno ? oreNumero(anno.minuti) : "—"}</span>
+            {anno ? <span className="ml-1 text-2xl">h</span> : null}
+          </span>
+          <span className="my-3 block border-t border-line/80" />
+          <span className="text-sm text-mist">{t("Media")}</span>
+          <span className="mt-1 font-display text-4xl leading-none">{anno?.media ? `${anno.media} m` : "—"}</span>
+        </Link>
+      </div>
+
+      <div className="mt-4 flex items-center gap-4">
+        <div className="relative size-20 shrink-0">
+          <svg viewBox="0 0 36 36" className="size-20 -rotate-90" aria-hidden>
+            <circle cx="18" cy="18" r="13.5" fill="none" className="text-lagoon" stroke="currentColor" strokeWidth="4.5" />
+            <circle
+              cx="18"
+              cy="18"
+              r="13.5"
+              fill="none"
+              className="text-foam"
+              stroke="currentColor"
+              strokeWidth="4.5"
+              strokeLinecap="round"
+              pathLength="100"
+              strokeDasharray={`${anno ? Math.min(100, Math.round((anno.immersioni / 20) * 100)) : 0} 100`}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-xl font-medium leading-none text-foam">{anno?.immersioni ?? 0}</span>
         </div>
-        <p className="relative mt-3 text-xs text-mist">{t("Traguardo consigliato: 20 immersioni l'anno. Non è un obbligo.")}</p>
-      </section>
+        <div className="min-w-0">
+          <p className="text-2xl leading-none text-foam">{t("{n} di {totale}", { n: anno?.immersioni ?? 0, totale: 20 })}</p>
+          <p className="mt-1 text-sm text-mist">{t("immersioni")}</p>
+          <p className="mt-1 text-xs text-mist">{t("Traguardo consigliato: 20 immersioni l'anno. Non è un obbligo.")}</p>
+          {anno?.massima ? <p className="mt-1 text-xs text-brass">{t("massima {m} m", { m: anno.massima })}</p> : null}
+        </div>
+      </div>
 
       <ModuliOggi righe={rows} />
 
@@ -193,7 +189,7 @@ function HomeBody() {
           ]
         ).map((voce) => (
           voce.to === "/condizioni" ? (
-            <Link key={voce.nome} to="/condizioni" className="flex items-center gap-3 rounded-2xl border border-line bg-deep px-3 py-3 shadow-[0_14px_22px_-16px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
+            <Link key={voce.nome} to="/condizioni" className="flex items-center gap-3 rounded-2xl border border-line bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84]">
               <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
               <span className="min-w-0">
                 <span className="block text-sm font-medium leading-tight">{t(voce.nome)}</span>
@@ -201,7 +197,7 @@ function HomeBody() {
               </span>
             </Link>
           ) : (
-          <Link key={voce.nome} to="/personale" search={{ voce: voce.voce }} className={`flex items-center gap-3 rounded-2xl bg-deep px-3 py-3 shadow-[0_14px_22px_-16px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84] ${voce.voce === "emergenze" ? "border-2 border-brass" : "border border-line"}`}>
+          <Link key={voce.nome} to="/personale" search={{ voce: voce.voce }} className={`flex items-center gap-3 rounded-2xl bg-deep px-3 py-3 transition-transform duration-100 ease-out active:scale-[0.97] active:shadow-[0_0_16px_rgba(94,234,212,0.28),inset_0_0_0_2px_#1f8f84] ${voce.voce === "emergenze" ? "border-2 border-brass" : "border border-line"}`}>
             <voce.icona className="size-7 shrink-0 text-lagoon" strokeWidth={1.5} />
             <span className="min-w-0">
               <span className="block text-sm font-medium leading-tight">
@@ -380,8 +376,8 @@ function FotoProfilo() {
   }
 
   return (
-    <button type="button" onClick={() => input.current?.click()} className="relative flex min-h-40 w-1/2 shrink-0 items-end overflow-hidden rounded-2xl bg-surface text-left shadow-[0_12px_20px_-14px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.16)]">
-      {src ? <img src={src} alt="" className="block h-auto w-full" /> : <span className="p-3 text-sm text-mist">{t("La tua foto")}</span>}
+    <button type="button" onClick={() => input.current?.click()} className="relative aspect-square w-1/2 shrink-0 overflow-hidden rounded-2xl bg-surface text-left">
+      {src ? <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <span className="p-3 text-sm text-mist">{t("La tua foto")}</span>}
       <input
         ref={input}
         type="file"
