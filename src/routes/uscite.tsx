@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppFrame, useFondale } from "@/components/app-frame";
 import { ScuolaChiusa } from "@/components/lucchetto";
@@ -17,6 +17,8 @@ import {
   listImbarcazioni,
   listUscite,
   riapriRegistro,
+  salvaVerbale,
+  leggiVerbale,
   togliGruppoUscita,
   togliPartecipante,
   type CandidatoUscita,
@@ -25,6 +27,7 @@ import {
   type GuidaUscita,
   type RigaUscita,
   type UscitaGiorno,
+  type VerbaleUscita,
 } from "@/lib/fondale.functions";
 import { formatDay, mesiCompiuti } from "@/lib/format";
 import { scriviPdfElenco, scriviPdfFoglio } from "@/lib/foglio-pdf";
@@ -558,6 +561,8 @@ function SchedaUscita({ id }: { id: number }) {
   const [modifica, setModifica] = useState(false);
   const [barche, setBarche] = useState<{ id: number; nome: string }[]>([]);
   const [testa, setTesta] = useState({ data: "", localita: "", punto: "", ora: "", barca: "" });
+  const [verbale, setVerbale] = useState<VerbaleUscita | null>(null);
+  const [passo, setPasso] = useState<null | "domanda" | "scheda">(null);
 
   function load(next: UscitaGiorno) {
     setUscita(next);
@@ -604,6 +609,20 @@ function SchedaUscita({ id }: { id: number }) {
         })
         .catch(() => undefined);
     }
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    let live = true;
+    leggiVerbale({ data: { id } })
+      .then((item) => {
+        if (live) setVerbale(item);
+      })
+      .catch(() => {
+        if (live) setVerbale(null);
+      });
     return () => {
       live = false;
     };
@@ -974,6 +993,12 @@ function SchedaUscita({ id }: { id: number }) {
           </button>
         ) : null}
 
+        {verbale ? <VerbaleLetto verbale={verbale} /> : chiusaDopo ? (
+          <button type="button" className="no-print mt-4 min-h-12 w-full rounded-full border border-line px-4 text-sm" onClick={() => setPasso("scheda")}>
+            {t("Aggiungi un verbale")}
+          </button>
+        ) : null}
+
         {uscita.gruppi.map((gruppo) => {
           const comune = comuni[gruppo.id] ?? { orarioFine: "", profondita: "", autorespiratore: "ARA monobombola", miscela: "Aria" };
           const nomeGruppo = riva && gruppo.passaggio ? t("Uscita da riva") : gruppo.guidaNome;
@@ -1321,25 +1346,61 @@ function SchedaUscita({ id }: { id: number }) {
                 type="button"
                 disabled={busy}
                 className="min-h-12 w-full rounded-full bg-lagoon px-4 font-medium"
-                onClick={() => {
-                  setBusy(true);
-                  setError(null);
-                  void chiudiRegistro({
-                    data: {
-                      id,
-                      righe: uscita.righe.map((row) => ({ id: row.id, ...(rientri[row.id] ?? { orarioFine: "", profondita: "", autorespiratore: "", miscela: "", percentualeO2: "" }) })),
-                    },
-                  })
-                    .then(load)
-                    .catch((reason: unknown) => setError(messaggioErrore(reason, "Registro non chiuso.")))
-                    .finally(() => setBusy(false));
-                }}
+                onClick={() => setPasso("domanda")}
               >
                 {t("Chiudi il registro")}
               </button>
             )}
           </div>
         </div>
+      ) : null}
+      {passo ? (
+        <VerbaleFoglio
+          nomi={giornata.righe.map((row) => `${row.cognome} ${row.nome}`.trim())}
+          soloSalva={chiusaDopo}
+          busy={busy}
+          onAnnulla={() => setPasso(null)}
+          onBene={() => {
+            setBusy(true);
+            setError(null);
+            void chiudiRegistro({
+              data: {
+                id,
+                righe: uscita.righe.map((row) => ({ id: row.id, ...(rientri[row.id] ?? { orarioFine: "", profondita: "", autorespiratore: "", miscela: "", percentualeO2: "" }) })),
+              },
+            })
+              .then((next) => {
+                setPasso(null);
+                load(next);
+              })
+              .catch((reason: unknown) => setError(messaggioErrore(reason, "Registro non chiuso.")))
+              .finally(() => setBusy(false));
+          }}
+          onProblema={() => setPasso("scheda")}
+          onSalva={(dato) => {
+            setBusy(true);
+            setError(null);
+            void salvaVerbale({ data: { id, ...dato } })
+              .then(async (salvato) => {
+                setVerbale(salvato);
+                if (chiusaDopo) {
+                  setPasso(null);
+                  return;
+                }
+                const next = await chiudiRegistro({
+                  data: {
+                    id,
+                    righe: uscita.righe.map((row) => ({ id: row.id, ...(rientri[row.id] ?? { orarioFine: "", profondita: "", autorespiratore: "", miscela: "", percentualeO2: "" }) })),
+                  },
+                });
+                setPasso(null);
+                load(next);
+              })
+              .catch((reason: unknown) => setError(messaggioErrore(reason, "Verbale non salvato.")))
+              .finally(() => setBusy(false));
+          }}
+          passo={passo}
+        />
       ) : null}
     </div>
   );
@@ -1368,6 +1429,216 @@ function Rientro({
           <option key={item} value={item}>{t(item)}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+const COSE = [
+  ["difficolta", "Subacqueo in difficoltà"],
+  ["separazione", "Separazione dal gruppo"],
+  ["ossigeno", "Usato l'ossigeno"],
+  ["altro", "Altro"],
+] as const;
+
+const FATTI = [
+  ["osservato", "Osservato a bordo"],
+  ["ossigeno", "Ossigeno"],
+  ["118", "Chiamato il 118"],
+  ["terra", "Accompagnato a terra"],
+] as const;
+
+function etichettaCosa(id: string): string {
+  return COSE.find((voce) => voce[0] === id)?.[1] ?? id;
+}
+
+function VerbaleLetto({ verbale }: { verbale: VerbaleUscita }) {
+  const t = useT();
+  const fatti = verbale.fatto.split(",").filter(Boolean).map((id) => t(FATTI.find((voce) => voce[0] === id)?.[1] ?? id));
+  return (
+    <section className="mt-5 border-t border-rule pt-4 text-ink">
+      <p className="text-xs font-medium uppercase tracking-widest text-lagoon">{t("Verbale")}</p>
+      <h2 className="mt-1 text-xl">{t(etichettaCosa(verbale.cosa))}</h2>
+      <p className="mt-2 whitespace-pre-wrap text-sm">{verbale.racconto}</p>
+      <p className="mt-2 text-sm">{verbale.chi}</p>
+      <p className="mt-1 text-sm">{fatti.join(" · ")} · {verbale.ora}</p>
+      {verbale.firma ? <img src={verbale.firma} alt={t("Firma della guida")} className="mt-3 h-24 rounded-xl border border-rule bg-white" /> : null}
+    </section>
+  );
+}
+
+function VerbaleFoglio({
+  nomi,
+  soloSalva,
+  busy,
+  passo,
+  onAnnulla,
+  onBene,
+  onProblema,
+  onSalva,
+}: {
+  nomi: string[];
+  soloSalva: boolean;
+  busy: boolean;
+  passo: "domanda" | "scheda";
+  onAnnulla: () => void;
+  onBene: () => void;
+  onProblema: () => void;
+  onSalva: (dato: VerbaleUscita) => void;
+}) {
+  const t = useT();
+  const [cosa, setCosa] = useState("");
+  const [racconto, setRacconto] = useState("");
+  const [scelti, setScelti] = useState<string[]>([]);
+  const [extra, setExtra] = useState("");
+  const [fatti, setFatti] = useState<string[]>([]);
+  const [ora, setOra] = useState(() => {
+    const adesso = new Date();
+    return `${String(adesso.getHours()).padStart(2, "0")}:${String(adesso.getMinutes()).padStart(2, "0")}`;
+  });
+  const [firma, setFirma] = useState("");
+  if (passo === "domanda") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/80 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:items-center">
+        <div className="w-full max-w-md rounded-3xl bg-deep p-5">
+          <h2 className="text-3xl leading-none">{t("È andato tutto bene?")}</h2>
+          <button type="button" disabled={busy} className="mt-5 min-h-14 w-full rounded-full bg-lagoon px-4 text-base font-medium disabled:opacity-60" onClick={onBene}>
+            {t("Sì, chiudi")}
+          </button>
+          <button type="button" disabled={busy} className="mt-3 min-h-14 w-full rounded-full border border-brass px-4 text-base font-medium text-brass" onClick={onProblema}>
+            {t("No, c'è stato un problema")}
+          </button>
+          <button type="button" className="mt-3 min-h-11 w-full text-sm text-mist" onClick={onAnnulla}>
+            {t("Annulla")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const chi = [...scelti, extra.trim()].filter(Boolean).join(", ");
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/80 p-3 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+      <form
+        className="mx-auto max-w-md space-y-4 rounded-3xl bg-deep p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSalva({ cosa, racconto: racconto.trim(), chi, fatto: fatti.join(","), ora, firma });
+        }}
+      >
+        <h2 className="text-2xl">{t("Cosa è successo")}</h2>
+        <div className="grid grid-cols-2 gap-2">
+          {COSE.map((voce) => (
+            <button key={voce[0]} type="button" className={`min-h-16 rounded-2xl border px-3 text-left text-sm ${cosa === voce[0] ? "border-brass bg-brass/15 text-brass" : "border-line"}`} onClick={() => setCosa(voce[0])}>
+              {t(voce[1])}
+            </button>
+          ))}
+        </div>
+        {cosa ? (
+          <label className="block text-sm">
+            {t("Racconta in due righe")}
+            <textarea required value={racconto} onChange={(event) => setRacconto(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-line bg-abyss px-3 py-2" />
+          </label>
+        ) : null}
+        <div>
+          <p className="text-sm">{t("Chi")}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {nomi.map((nome) => {
+              const acceso = scelti.includes(nome);
+              return (
+                <button key={nome} type="button" className={`min-h-11 rounded-full border px-3 text-sm ${acceso ? "border-lagoon bg-lagoon/15" : "border-line"}`} onClick={() => setScelti((lista) => (acceso ? lista.filter((item) => item !== nome) : [...lista, nome]))}>
+                  {nome}
+                </button>
+              );
+            })}
+          </div>
+          <input value={extra} onChange={(event) => setExtra(event.target.value)} placeholder={t("Aggiungi un nome")} className="mt-2 min-h-11 w-full rounded-xl border border-line bg-abyss px-3" />
+        </div>
+        <div>
+          <p className="text-sm">{t("Cosa avete fatto")}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {FATTI.map((voce) => {
+              const acceso = fatti.includes(voce[0]);
+              return (
+                <button key={voce[0]} type="button" className={`min-h-14 rounded-2xl border px-3 text-left text-sm ${acceso ? "border-lagoon bg-lagoon/15" : "border-line"}`} onClick={() => setFatti((lista) => (acceso ? lista.filter((item) => item !== voce[0]) : [...lista, voce[0]]))}>
+                  {t(voce[1])}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="block text-sm">
+          {t("Ora")}
+          <input type="time" required value={ora} onChange={(event) => setOra(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-abyss px-3" />
+        </label>
+        <FirmaGuida value={firma} onChange={setFirma} />
+        <button type="submit" disabled={busy || !cosa || !firma} className="min-h-12 w-full rounded-full bg-lagoon px-4 font-medium disabled:opacity-60">
+          {soloSalva ? t("Salva il verbale") : t("Salva e chiudi il registro")}
+        </button>
+        <button type="button" className="min-h-11 w-full text-sm text-mist" onClick={onAnnulla}>
+          {t("Annulla")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function FirmaGuida({ value, onChange }: { value: string; onChange: (firma: string) => void }) {
+  const t = useT();
+  const ref = useRef<HTMLCanvasElement>(null);
+  const tratto = useRef<{ x: number; y: number } | null>(null);
+  const mosso = useRef(false);
+  const pronto = useRef(false);
+
+  function misura() {
+    const canvas = ref.current;
+    if (!canvas || pronto.current) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * 2));
+    canvas.height = Math.max(1, Math.floor(rect.height * 2));
+    pronto.current = true;
+  }
+
+  function punto(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = ref.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: ((event.clientX - rect.left) / rect.width) * canvas.width, y: ((event.clientY - rect.top) / rect.height) * canvas.height };
+  }
+
+  return (
+    <div>
+      <p className="text-sm">{t("Firma della guida")}</p>
+      <canvas
+        ref={ref}
+        className="mt-2 h-36 w-full touch-none rounded-xl border border-line bg-abyss"
+        onPointerDown={(event) => {
+          misura();
+          tratto.current = punto(event);
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const canvas = ref.current;
+          const da = tratto.current;
+          const ctx = canvas?.getContext("2d");
+          if (!canvas || !da || !ctx) return;
+          const a = punto(event);
+          ctx.strokeStyle = "#f4f1ea";
+          ctx.lineWidth = 3;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(da.x, da.y);
+          ctx.lineTo(a.x, a.y);
+          ctx.stroke();
+          tratto.current = a;
+          mosso.current = true;
+        }}
+        onPointerUp={(event) => {
+          tratto.current = null;
+          const canvas = ref.current;
+          if (canvas && mosso.current) onChange(canvas.toDataURL("image/png"));
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+      />
+      {value ? <p className="mt-1 text-xs text-lagoon">{t("Firma della guida")}</p> : null}
     </div>
   );
 }

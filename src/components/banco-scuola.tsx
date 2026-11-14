@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, Calendar, ClipboardList, Users } from "lucide-react";
+import { BarChart3, Calendar, ClipboardList, FolderOpen, Users } from "lucide-react";
 import { useFondale } from "@/components/app-frame";
 import { ScuolaChiusa } from "@/components/lucchetto";
 import { listSubmissions, listUscite, contaModuliDaLeggere, reportControlli, listaSoci, type ReportControlli } from "@/lib/fondale.functions";
@@ -135,6 +135,10 @@ export function BancoScuola() {
           <ClipboardList className="size-5 shrink-0 text-lagoon" aria-hidden />
           <span className="flex-1 text-base font-medium">{t("Moduli")}</span>
           {moduliN > 0 ? <span className="text-sm text-brass">{moduliN}</span> : null}
+        </Link>
+        <Link to="/archivio" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
+          <FolderOpen className="size-5 shrink-0 text-lagoon" aria-hidden />
+          <span className="flex-1 text-base font-medium">{t("Archivio moduli")}</span>
         </Link>
         <Link to="/grafici" className="flex min-h-14 items-center gap-3 rounded-2xl border border-line bg-deep px-4">
           <BarChart3 className="size-5 shrink-0 text-lagoon" aria-hidden />

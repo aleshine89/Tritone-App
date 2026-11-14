@@ -8520,6 +8520,80 @@ export const chiudiRegistro = createServerFn({ method: "POST" })
     return loadUscita(sql, clubId, data.id);
   });
 
+export type VerbaleUscita = {
+  cosa: string;
+  racconto: string;
+  chi: string;
+  fatto: string;
+  ora: string;
+  firma: string;
+};
+
+const COSE_VERBALE = ["difficolta", "separazione", "ossigeno", "altro"] as const;
+const FATTI_VERBALI = ["osservato", "ossigeno", "118", "terra"] as const;
+
+export const leggiVerbale = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const id = Number((input as { id?: unknown } | null)?.id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Uscita non valida.");
+    return { id };
+  })
+  .handler(async ({ context, data }): Promise<VerbaleUscita | null> => {
+    const sql = await getSql();
+    const profile = await requireStaff(sql, context.userId);
+    const clubId = profile.clubId ?? 0;
+    const rows = await sql<{ cosa: string; racconto: string; chi: string; fatto: string; ora: string; firma: string }>`
+      select v.cosa, v.racconto, v.chi, v.fatto, v.ora, v.firma
+      from verbali_uscita v
+      join uscite u on u.id = v.uscita_id
+      where v.uscita_id = ${data.id} and u.club_id = ${clubId}
+    `;
+    return rows[0] ?? null;
+  });
+
+export const salvaVerbale = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+    const id = Number(raw.id);
+    const cosa = asText(raw.cosa).trim();
+    const racconto = asText(raw.racconto).trim().slice(0, 2000);
+    const chi = asText(raw.chi).trim().slice(0, 1000);
+    const fatto = asText(raw.fatto).trim().slice(0, 200);
+    const ora = asText(raw.ora).trim().slice(0, 8);
+    const firma = asText(raw.firma).trim();
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Uscita non valida.");
+    if (!COSE_VERBALE.includes(cosa as (typeof COSE_VERBALE)[number])) throw new Error("Manca cosa è successo.");
+    if (racconto.length < 2) throw new Error("Racconta in due righe cosa è successo.");
+    if (!chi) throw new Error("Manca chi era coinvolto.");
+    const fatti = fatto.split(",").filter(Boolean);
+    if (!fatti.length || fatti.some((voce) => !FATTI_VERBALI.includes(voce as (typeof FATTI_VERBALI)[number]))) throw new Error("Manca cosa avete fatto.");
+    if (!/^\d{2}:\d{2}$/.test(ora)) throw new Error("Manca l'ora.");
+    if (!firma.startsWith("data:image/png;base64,") || firma.length > 400_000) throw new Error("Manca la firma della guida.");
+    return { id, cosa, racconto, chi, fatto, ora, firma };
+  })
+  .handler(async ({ context, data }): Promise<VerbaleUscita> => {
+    const sql = await getSql();
+    const profile = await requireStaff(sql, context.userId);
+    const clubId = profile.clubId ?? 0;
+    const uscite = await sql<{ id: number }>`select id from uscite where id = ${data.id} and club_id = ${clubId}`;
+    if (!uscite[0]) throw new Error("Uscita non trovata.");
+    await sql`
+      insert into verbali_uscita (uscita_id, club_id, creato_da, cosa, racconto, chi, fatto, ora, firma)
+      values (${data.id}, ${clubId}, ${context.userId}, ${data.cosa}, ${data.racconto}, ${data.chi}, ${data.fatto}, ${data.ora}, ${data.firma})
+      on conflict (uscita_id) do update set
+        cosa = excluded.cosa,
+        racconto = excluded.racconto,
+        chi = excluded.chi,
+        fatto = excluded.fatto,
+        ora = excluded.ora,
+        firma = excluded.firma,
+        creato_da = excluded.creato_da
+    `;
+    return { cosa: data.cosa, racconto: data.racconto, chi: data.chi, fatto: data.fatto, ora: data.ora, firma: data.firma };
+  });
+
 export const riapriRegistro = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: unknown) => {
