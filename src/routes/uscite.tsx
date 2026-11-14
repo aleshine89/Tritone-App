@@ -360,14 +360,16 @@ function Elenco() {
           .map((row) => {
             const apertaUscita = row.fase !== "chiusa";
             return (
-              <li key={row.id} className={`overflow-hidden rounded-card border ${apertaUscita ? "border-brass bg-amber" : "border-line"}`}>
-                <Link to="/uscite" search={{ id: row.id }} className="block px-4 py-3">
-                  <p className={`text-sm ${apertaUscita ? "text-brass" : ""}`}>
-                    {formatDay(row.data)} · {!riva && row.imbarcazione ? `${row.imbarcazione} · ` : ""}
-                    {row.localita || t("Senza località")}
+              <li key={row.id} className={`overflow-hidden rounded-[24px] border ${apertaUscita ? "border-brass/70 bg-deep shadow-[0_16px_28px_-16px_rgba(232,184,109,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]" : "border-line bg-deep/40"}`}>
+                <Link to="/uscite" search={{ id: row.id }} className="block px-4 py-4">
+                  <p className={`${apertaUscita ? "font-display text-2xl leading-none text-foam" : "text-sm"}`}>
+                    {!riva && row.imbarcazione ? row.imbarcazione : row.localita || t("Senza località")}
+                  </p>
+                  <p className={`mt-2 text-sm ${apertaUscita ? "text-brass" : "text-mist"}`}>
+                    {formatDay(row.data)} · {row.localita || t("Senza località")}
                     {apertaUscita ? ` · ${t("Da chiudere")}` : ""}
                   </p>
-                  <p className={`mt-1 text-xs ${apertaUscita ? "text-brass" : "text-mist"}`}>
+                  <p className={`mt-1 text-xs ${apertaUscita ? "text-mist" : "text-mist"}`}>
                     {riva ? "" : `${row.guidaNome} · `}{row.persone === 1 ? t("{n} persona", { n: row.persone }) : t("{n} persone", { n: row.persone })} · {faseLabel(row.fase, t)}
                     {row.fase === "chiusa" ? " · PDF" : ""}
                     {row.fase === "chiusa" && mesiCompiuti(row.data, frame.oggi) ? ` · ${t("Sei mesi compiuti")}` : ""}
@@ -892,6 +894,21 @@ function SchedaUscita({ id }: { id: number }) {
           </button>
         </form>
       ) : null}
+      <div className="no-print mt-4 rounded-[28px] border border-lagoon/30 bg-deep px-4 py-5 shadow-[0_20px_32px_-20px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.14)]">
+        <p className="text-xs uppercase tracking-[0.16em] text-lagoon">{uscita.imbarcazione || t("Uscita")}</p>
+        <p className="mt-2 font-display text-4xl leading-none">{uscita.localita}</p>
+        <p className="mt-2 text-sm text-mist">{formatDay(uscita.data)} · {t("uscita {ora}", { ora: uscita.orarioInizio })}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <p className="rounded-2xl border border-line bg-abyss px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <span className="block text-[11px] uppercase tracking-wide text-mist">{t("Gruppi")}</span>
+            <span className="mt-1 block font-display text-3xl leading-none">{uscita.gruppi.length}</span>
+          </p>
+          <p className="rounded-2xl border border-line bg-abyss px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <span className="block text-[11px] uppercase tracking-wide text-mist">{t("Persone")}</span>
+            <span className="mt-1 block font-display text-3xl leading-none">{uscita.gruppi.reduce((somma, gruppo) => somma + gruppo.righe.length, 0)}</span>
+          </p>
+        </div>
+      </div>
       <article className="paper mt-3 rounded-card border border-rule bg-paper p-5 text-ink">
         <p className="text-xs font-medium uppercase tracking-widest text-lagoon">{t("Art. 12 · registro del centro")}</p>
         <h1 className="mt-1 text-3xl text-ink">{uscita.imbarcazione || uscita.localita}</h1>

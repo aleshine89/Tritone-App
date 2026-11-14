@@ -190,6 +190,7 @@ function Condizioni() {
             })}
           </div>
           <p className="mt-1 text-center text-[11px] text-brass">{t("Il pallino segna il giorno migliore.")}</p>
+          <ColonnaMare giorno={giorno} />
           <Dettaglio giorno={giorno} />
           <Memoria lettura={lettura} />
           <Cielo lat={lat} lon={lon} giorno={giorno} />
@@ -206,6 +207,27 @@ function Condizioni() {
         </p>
       </footer>
     </div>
+  );
+}
+
+function ColonnaMare({ giorno }: { giorno: GiornoMare }) {
+  const t = useT();
+  const vista = giorno.vista ?? 8;
+  const buio = Math.min(78, Math.max(18, 70 - vista * 2));
+  const livelli = [
+    { metri: "0", gradi: giorno.acqua },
+    { metri: "18", gradi: giorno.acqua18 },
+    { metri: "40", gradi: giorno.acqua40 },
+  ];
+  return (
+    <section className="relative mt-3 h-52 overflow-hidden rounded-[28px] border border-lagoon/30 shadow-[0_20px_32px_-20px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]" style={{ background: `linear-gradient(180deg, rgba(94,234,212,0.38) 0%, rgba(14,61,66,0.88) ${buio}%, #07141c 100%)` }}>
+      <div className="absolute inset-y-3 left-4 flex flex-col justify-between text-[11px] text-foam/80">
+        {livelli.map((livello) => (
+          <span key={livello.metri}>{livello.metri} m{livello.gradi != null ? ` · ${livello.gradi} °C` : ""}</span>
+        ))}
+      </div>
+      <p className="absolute bottom-4 right-4 text-right text-sm text-foam">{giorno.vista != null ? `~${giorno.vista} m` : t("Visibilità")}</p>
+    </section>
   );
 }
 

@@ -78,7 +78,7 @@ function Grafici() {
           <button
             key={voce.id}
             type="button"
-            className={`min-h-11 rounded-full px-2 text-sm ${periodo === voce.id ? "bg-tide font-medium text-white" : "border border-line"}`}
+            className={`min-h-11 rounded-2xl border px-2 text-sm transition ${periodo === voce.id ? "-translate-y-0.5 border-lagoon bg-deep font-medium text-foam shadow-[0_12px_18px_-14px_rgba(94,234,212,0.7),inset_0_1px_0_rgba(255,255,255,0.16)]" : "border-line bg-deep/40"}`}
             onClick={() => setPeriodo(voce.id)}
           >
             {t(voce.label)}
@@ -101,7 +101,7 @@ function Grafici() {
             <p className="mt-1 font-display text-4xl leading-none">{tempoTesto(dato.minuti, t)}</p>
             <Variazione value={dato.delta.minuti} />
           </section>
-          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4">
+          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4 shadow-[0_16px_26px_-18px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.1)]">
             <h2 className="px-1 text-sm font-medium">{t("Soci per anno")}</h2>
             {dato.sociAnni.length === 0 ? (
               <p className="mt-3 px-1 text-sm text-mist">{t("Nessun socio accettato.")}</p>
@@ -118,7 +118,7 @@ function Grafici() {
               </div>
             )}
           </section>
-          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4">
+          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4 shadow-[0_16px_26px_-18px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.1)]">
             <h2 className="px-1 text-sm font-medium">{t("Soci dell'anno in corso")}</h2>
             <div className="mt-3 h-52">
               <ResponsiveContainer width="100%" height="100%">
@@ -131,7 +131,7 @@ function Grafici() {
               </ResponsiveContainer>
             </div>
           </section>
-          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4">
+          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4 shadow-[0_16px_26px_-18px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.1)]">
             <h2 className="px-1 text-sm font-medium">{t(periodo === "anno" ? "Uscite per mese" : "Uscite per giorno")}</h2>
             <div className="mt-3 h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -190,7 +190,7 @@ function Grafici() {
               </div>
             )}
           </section>
-          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4">
+          <section className="mt-3 rounded-2xl border border-line bg-deep px-3 py-4 shadow-[0_16px_26px_-18px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.1)]">
             <h2 className="px-1 text-sm font-medium">{t("Guide più attive")}</h2>
             {dato.guide.length === 0 ? (
               <p className="mt-3 px-1 text-sm text-mist">{t("Nessuna guida in questo periodo.")}</p>
@@ -216,7 +216,7 @@ function Grafici() {
 function Scheda({ titolo, valore, delta }: { titolo: string; valore: number; delta: number | null }) {
   const t = useT();
   return (
-    <section className="rounded-2xl border border-line bg-deep px-4 py-4">
+    <section className="rounded-2xl border border-line bg-deep px-4 py-4 shadow-[0_16px_26px_-18px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.12)]">
       <p className="text-xs text-mist">{t(titolo)}</p>
       <p className="mt-2 font-display text-4xl leading-none">{valore}</p>
       <Variazione value={delta} />
