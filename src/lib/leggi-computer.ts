@@ -12,17 +12,24 @@ export type LetturaComputer = {
 };
 
 export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo" | "letto"> {
-  const piatto = testo.replace(/\s+/g, " ");
-  const data = dataDi(piatto);
-  const ora = oraVicino(piatto, /inizi[oa]|start/i);
-  const oraFine = oraVicino(piatto, /fine|end/i);
-  let profondita = numeroVicino(piatto, /max(?:\s*depth)?/i);
-  let media = numeroVicino(piatto, /med(?:ia)?|avg|average/i);
+  const piatto = normalizza(testo);
+  let data = dataDi(piatto);
+  let ora = oraVicino(piatto, /[i1l]n[i1l]z[i1l]?[o0a]|start/i);
+  let oraFine = oraVicino(piatto, /f[i1l]ne|end/i);
+  let profondita = numeroVicino(piatto, /[mh][a4]x/i);
+  let media = numeroVicino(piatto, /m[e3][do0]|avg|average/i);
+  const tempi = orari(piatto);
+  if (!ora && tempi[0]) ora = tempi[0];
+  if (!oraFine && tempi[1] && tempi[1] !== ora) oraFine = tempi[1];
+  const quote = profonditaLibere(piatto);
+  if (!profondita && quote[0]) profondita = quote[0];
+  if (!media && quote[1]) media = quote[1];
   if (profondita && media && Number(media) > Number(profondita)) {
     const scambio = profondita;
     profondita = media;
     media = scambio;
   }
+  if (!data) data = dataDi(piatto.replace(/(\d{1,2})[ .](\d{1,2})[ .](\d{2,4})/, "$1.$2.$3"));
   const daiTempi = ora && oraFine ? minutiTra(ora, oraFine) : "";
   const scritto = durataScritta(piatto);
   const minuti = daiTempi || scritto;
@@ -35,6 +42,43 @@ export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
   const profilo = campi.minuti && campi.profondita ? await tracciaProfilo(dataUrl, Number(campi.minuti), Number(campi.profondita)) : [];
   const letto = Boolean(campi.data || campi.ora || campi.oraFine || campi.minuti || campi.profondita || campi.media || profilo.length > 1);
   return { ...campi, profilo, letto };
+}
+
+function normalizza(testo: string): string {
+  return testo
+    .replace(/(\d)\s*:\s*(\d)/g, "$1:$2")
+    .replace(/(\d)\s*[.,]\s*(\d)/g, "$1.$2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function orari(testo: string): string[] {
+  const trovati: string[] = [];
+  for (const match of testo.matchAll(/\b(\d{1,2}):(\d{2})\b/g)) {
+    const ore = Number(match[1]);
+    const minuti = Number(match[2]);
+    if (ore > 23 || minuti > 59) continue;
+    const ora = `${String(ore).padStart(2, "0")}:${String(minuti).padStart(2, "0")}`;
+    if (!trovati.includes(ora)) trovati.push(ora);
+  }
+  return trovati;
+}
+
+function profonditaLibere(testo: string): string[] {
+  const senzaDate = testo
+    .replace(/\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/g, " ")
+    .replace(/\b\d{1,2}:\d{2}\b/g, " ");
+  const numeri: number[] = [];
+  for (const match of senzaDate.matchAll(/(\d{1,3}\.\d{1,2})(?=\s*m\b|\b)/gi)) {
+    const token = match[1];
+    const n = Number(token);
+    if (n < 2 || n > 200) continue;
+    const pezzi = token.split(".");
+    if (pezzi[1].length === 2 && Number(pezzi[0]) <= 23 && Number(pezzi[1]) <= 59) continue;
+    numeri.push(n);
+  }
+  const unici = [...new Set(numeri)].sort((a, b) => b - a);
+  return unici.slice(0, 2).map((n) => String(n));
 }
 
 function dataDi(testo: string): string {
@@ -85,19 +129,72 @@ function durataScritta(testo: string): string {
 
 async function ocr(dataUrl: string): Promise<string> {
   if (typeof document === "undefined") return "";
+  const immagini = await preparaSchermo(dataUrl);
   try {
     const { createWorker, PSM } = await import("tesseract.js");
-    const worker = await createWorker("eng");
+    const worker = await createWorker("ita+eng");
     try {
-      await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO });
-      const result = await worker.recognize(dataUrl);
-      return result.data.text ?? "";
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, user_defined_dpi: "300" });
+      const pezzi: string[] = [];
+      for (const immagine of immagini) {
+        const result = await worker.recognize(immagine);
+        if (result.data.text) pezzi.push(result.data.text);
+      }
+      const unito = pezzi.join("\n");
+      if (unito.trim().length >= 8) return unito;
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, user_defined_dpi: "300" });
+      for (const immagine of immagini) {
+        const result = await worker.recognize(immagine);
+        if (result.data.text) pezzi.push(result.data.text);
+      }
+      return pezzi.join("\n");
     } finally {
       await worker.terminate();
     }
   } catch {
     return "";
   }
+}
+
+async function preparaSchermo(dataUrl: string): Promise<string[]> {
+  const img = await carica(dataUrl);
+  if (!img) return [dataUrl];
+  const lunga = Math.max(img.width, img.height);
+  const scale = lunga > 1800 ? 1800 / lunga : lunga < 1100 ? Math.min(2, 1600 / Math.max(lunga, 1)) : 1;
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return [dataUrl];
+  ctx.drawImage(img, 0, 0, width, height);
+  const image = ctx.getImageData(0, 0, width, height);
+  const { data } = image;
+  const luci: number[] = [];
+  for (let i = 0; i < data.length; i += 16) luci.push(data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722);
+  luci.sort((a, b) => a - b);
+  const lo = luci[Math.floor(luci.length * 0.08)] ?? 0;
+  const hi = luci[Math.floor(luci.length * 0.92)] ?? 255;
+  const span = Math.max(24, hi - lo);
+  const scuro = luci[Math.floor(luci.length / 2)] < 120;
+  const invertito = ctx.createImageData(width, height);
+  for (let i = 0; i < data.length; i += 4) {
+    const l = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
+    let v = Math.max(0, Math.min(255, ((l - lo) / span) * 255));
+    if (scuro) v = 255 - v;
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+    invertito.data[i] = 255 - v;
+    invertito.data[i + 1] = 255 - v;
+    invertito.data[i + 2] = 255 - v;
+    invertito.data[i + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  const prima = canvas.toDataURL("image/png");
+  ctx.putImageData(invertito, 0, 0);
+  return [prima, canvas.toDataURL("image/png")];
 }
 
 async function tracciaProfilo(dataUrl: string, minuti: number, massima: number): Promise<PuntoProfilo[]> {
