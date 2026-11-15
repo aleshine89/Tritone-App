@@ -123,6 +123,7 @@ function unisciPagine(base: LetturaComputer, aggiunta: LetturaComputer): Lettura
     temperatura: tieni(base.temperatura, aggiunta.temperatura),
     ossigeno: tieni(base.ossigeno, aggiunta.ossigeno),
     profilo: base.profilo.length > 1 ? base.profilo : aggiunta.profilo,
+    testo: base.testo || aggiunta.testo,
     letto: true,
   };
 }
@@ -206,6 +207,7 @@ function Logbook() {
     try {
       let unito: Awaited<ReturnType<typeof leggiComputer>> | null = null;
       let lette = 0;
+      let visto = "";
       for (let i = 0; i < files.length; i += 1) {
         if (files.length > 1) setScanMsg(t("Leggo la foto {n} di {totale}.", { n: i + 1, totale: files.length }));
         const foto = await new Promise<string>((resolve, reject) => {
@@ -215,12 +217,13 @@ function Logbook() {
           reader.readAsDataURL(files[i]);
         });
         const letto = await leggiComputer(foto);
+        if (letto.testo.trim()) visto = letto.testo.replace(/\s+/g, " ").trim().slice(0, 140);
         if (!letto.letto) continue;
         lette += 1;
         unito = unito ? unisciPagine(unito, letto) : letto;
       }
       if (!unito || !lette) {
-        setScanMsg(t("Non ho letto lo schermo. Tieni la foto dritta e riprova."));
+        setScanMsg(visto ? t("Ho visto «{testo}» ma non sono i dati dello schermo.", { testo: visto }) : t("Non ho letto lo schermo. Tieni la foto dritta e riprova."));
         return;
       }
       setDraft((current) => ({
@@ -701,9 +704,9 @@ function Logbook() {
                       <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanCamera.current?.click()}>{t("Scatta foto")}</button>
                       <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanGalleria.current?.click()}>{t("Foto dal telefono")}</button>
                       <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanFile.current?.click()}>{t("Scansiona file")}</button>
-                      <input ref={scanCamera} type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
-                      <input ref={scanGalleria} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
-                      <input ref={scanFile} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                      <input ref={scanCamera} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                      <input ref={scanGalleria} type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                      <input ref={scanFile} type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
                     </div>
                   </div>
                 ) : null}

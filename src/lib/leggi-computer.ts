@@ -9,11 +9,12 @@ export type LetturaComputer = {
   media: string;
   temperatura: string;
   ossigeno: string;
+  testo: string;
   profilo: PuntoProfilo[];
   letto: boolean;
 };
 
-export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo" | "letto"> {
+export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo" | "letto" | "testo"> {
   const piatto = normalizza(testo);
   let data = dataDi(piatto);
   let ora = oraVicino(piatto, /[i1l]n[i1l]z[i1l]?[o0a]|start|entry|entrata|discesa/i);
@@ -48,17 +49,30 @@ export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
   const letture = await ocr(dataUrl);
   let migliore = interpretaSchermo("");
   let puntiMigliori = -1;
+  let testoMigliore = "";
   for (const testo of letture) {
     const campi = interpretaSchermo(testo);
-    const punti = [campi.data, campi.ora, campi.oraFine, campi.minuti, campi.profondita, campi.media, campi.temperatura, campi.ossigeno].filter(Boolean).length;
+    const punti = punteggioLettura(campi);
     if (punti > puntiMigliori) {
       puntiMigliori = punti;
       migliore = campi;
+      testoMigliore = testo;
     }
   }
   const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(dataUrl, Number(migliore.minuti), Number(migliore.profondita)) : [];
   const letto = puntiMigliori > 0 || profilo.length > 1;
-  return { ...migliore, profilo, letto };
+  return { ...migliore, testo: testoMigliore, profilo, letto };
+}
+
+function punteggioLettura(campi: { data: string; ora: string; oraFine: string; minuti: string; profondita: string; media: string }): number {
+  const minuti = Number(campi.minuti);
+  let punti = 0;
+  if (campi.profondita) punti += 4;
+  if (campi.media) punti += 2;
+  if (campi.data) punti += 1;
+  if (minuti >= 5 && minuti <= 120) punti += 4;
+  if (campi.ora && campi.oraFine && minuti >= 5) punti += 2;
+  return punti;
 }
 
 function normalizza(testo: string): string {
@@ -105,6 +119,19 @@ function profonditaSenzaPunto(testo: string): string[] {
   return numeri.map((n) => String(n));
 }
 
+function centroQuota(testo: string, ripiego: number): number {
+  let centro = ripiego;
+  let massima = 0;
+  for (const match of testo.matchAll(/\b(\d{2,4}(?:\.\d{1,2})?)\s*m\b/gi)) {
+    const raw = match[1];
+    const n = raw.includes(".") ? Number(raw) : Number(`${raw.slice(0, -1)}.${raw.slice(-1)}`);
+    if (!Number.isFinite(n) || n < 3 || n > 120 || n <= massima || match.index == null) continue;
+    massima = n;
+    centro = match.index;
+  }
+  return centro;
+}
+
 function scegliOrari(testo: string): string[] {
   const validi: { ora: string; at: number }[] = [];
   for (const match of testo.matchAll(/\b(\d{1,2}):(\d{2})\b/g)) {
@@ -114,12 +141,23 @@ function scegliOrari(testo: string): string[] {
     const ora = `${String(ore).padStart(2, "0")}:${String(minuti).padStart(2, "0")}`;
     if (!validi.some((voce) => voce.ora === ora && Math.abs(voce.at - match.index) < 4)) validi.push({ ora, at: match.index });
   }
-  const quota = testo.search(/\b\d{2,4}(?:\.\d{1,2})?\s*m\b/i);
-  if (quota >= 0) {
-    const vicini = validi.filter((voce) => Math.abs(voce.at - quota) < 160).sort((a, b) => a.at - b.at);
-    if (vicini.length) return vicini.map((voce) => voce.ora);
+  if (validi.length < 2) return validi.map((voce) => voce.ora);
+  const centro = centroQuota(testo, validi[0].at);
+  const vicini = validi.filter((voce) => Math.abs(voce.at - centro) <= 90);
+  const candidati = vicini.length >= 2 ? vicini : validi;
+  let meglio: { inizio: string; fine: string; costo: number } | null = null;
+  for (let i = 0; i < candidati.length; i += 1) {
+    for (let j = i + 1; j < candidati.length; j += 1) {
+      const prima = candidati[i].at <= candidati[j].at ? candidati[i] : candidati[j];
+      const seconda = prima === candidati[i] ? candidati[j] : candidati[i];
+      const durata = Number(minutiTra(prima.ora, seconda.ora));
+      if (!durata || durata < 5 || durata > 120) continue;
+      const costo = Math.abs(prima.at - centro) + Math.abs(seconda.at - centro);
+      if (!meglio || costo < meglio.costo) meglio = { inizio: prima.ora, fine: seconda.ora, costo };
+    }
   }
-  return validi.slice(0, 2).map((voce) => voce.ora);
+  if (meglio) return [meglio.inizio, meglio.fine];
+  return [];
 }
 
 function orari(testo: string): string[] {
@@ -232,64 +270,78 @@ async function ocr(dataUrl: string): Promise<string[]> {
   const immagini = await preparaSchermo(dataUrl);
   try {
     const { createWorker, PSM } = await import("tesseract.js");
-    const worker = await createWorker("eng");
+    const worker = await createWorker("eng", undefined, {
+      workerPath: "/tesseract/worker.min.js",
+      corePath: "/tesseract/core",
+      langPath: "/tesseract",
+    });
     try {
       const pezzi: string[] = [];
       await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, user_defined_dpi: "300" });
       for (const immagine of immagini) {
-        const result = await worker.recognize(immagine);
-        if (result.data.text?.trim()) pezzi.push(result.data.text);
+        try {
+          const result = await worker.recognize(immagine);
+          if (!result.data.text?.trim()) continue;
+          pezzi.push(result.data.text);
+          if (punteggioLettura(interpretaSchermo(result.data.text)) >= 8) return pezzi;
+        } catch {
+          /* l'altra versione della foto */
+        }
       }
-      const migliore = Math.max(0, ...pezzi.map((testo) => {
-        const campi = interpretaSchermo(testo);
-        return [campi.ora, campi.profondita, campi.media, campi.minuti].filter(Boolean).length;
-      }));
-      if (migliore >= 2) return pezzi;
+      if (pezzi.length) return pezzi;
       await worker.setParameters({ tessedit_pageseg_mode: PSM.AUTO, user_defined_dpi: "300" });
       for (const immagine of immagini) {
-        const result = await worker.recognize(immagine);
-        if (result.data.text?.trim()) pezzi.push(result.data.text);
+        try {
+          const result = await worker.recognize(immagine);
+          if (result.data.text?.trim()) pezzi.push(result.data.text);
+        } catch {
+          /* continua */
+        }
       }
       return pezzi;
     } finally {
       await worker.terminate();
     }
-  } catch {
-    return [];
+  } catch (error) {
+    const dettaglio = error instanceof Error ? error.message.replace(/\s+/g, " ").slice(0, 140) : "";
+    throw new Error(dettaglio ? `Il lettore non parte: ${dettaglio}` : "Il lettore non parte.");
   }
 }
 
 async function preparaSchermo(dataUrl: string): Promise<string[]> {
   const img = await carica(dataUrl);
   if (!img) return [dataUrl];
+  const crop = ritaglioSchermo(img);
+  return crop ? [dataUrl, crop] : [dataUrl];
+}
+
+function ritaglioSchermo(img: HTMLImageElement): string | null {
   const lunga = Math.max(img.width, img.height);
-  const scale = lunga > 1400 ? 1400 / lunga : 1;
+  const scale = lunga > 900 ? 900 / lunga : 1;
   const width = Math.max(1, Math.round(img.width * scale));
   const height = Math.max(1, Math.round(img.height * scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return [dataUrl];
+  if (!ctx) return null;
   ctx.drawImage(img, 0, 0, width, height);
-  const pieno = canvas.toDataURL("image/png");
   const zona = zonaSchermo(ctx.getImageData(0, 0, width, height));
-  if (zona.w >= width * 0.98 && zona.h >= height * 0.98) return [pieno];
+  if (zona.w > width * 0.85 && zona.h > height * 0.85) return null;
+  const x = Math.max(0, Math.round(zona.x / scale));
+  const y = Math.max(0, Math.round(zona.y / scale));
+  const w = Math.min(img.width - x, Math.round(zona.w / scale));
+  const h = Math.min(img.height - y, Math.round(zona.h / scale));
+  if (w < 40 || h < 40) return null;
+  const fattore = Math.min(2, Math.max(1, 1200 / Math.max(w, h)));
   const crop = document.createElement("canvas");
-  crop.width = zona.w;
-  crop.height = zona.h;
+  crop.width = Math.round(w * fattore);
+  crop.height = Math.round(h * fattore);
   const cx = crop.getContext("2d");
-  if (!cx) return [pieno];
-  cx.drawImage(canvas, zona.x, zona.y, zona.w, zona.h, 0, 0, zona.w, zona.h);
-  const ingrandito = document.createElement("canvas");
-  const fattore = Math.min(3, Math.max(1, 1100 / Math.max(zona.w, zona.h)));
-  ingrandito.width = Math.round(zona.w * fattore);
-  ingrandito.height = Math.round(zona.h * fattore);
-  const ix = ingrandito.getContext("2d");
-  if (!ix) return [pieno, crop.toDataURL("image/png")];
-  ix.imageSmoothingEnabled = true;
-  ix.drawImage(crop, 0, 0, ingrandito.width, ingrandito.height);
-  return [ingrandito.toDataURL("image/png"), pieno];
+  if (!cx) return null;
+  cx.imageSmoothingEnabled = true;
+  cx.drawImage(img, x, y, w, h, 0, 0, crop.width, crop.height);
+  return crop.toDataURL("image/png");
 }
 
 function zonaSchermo(image: ImageData): { x: number; y: number; w: number; h: number } {
