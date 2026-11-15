@@ -47,21 +47,71 @@ export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo
 
 export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
   const letture = await ocr(dataUrl);
-  let migliore = interpretaSchermo("");
-  let puntiMigliori = -1;
-  let testoMigliore = "";
-  for (const testo of letture) {
+  let migliore = unisciLetture(letture);
+  let testoMigliore = letture[0] || "";
+  const cifre = await leggiCifre(dataUrl);
+  const tempi = orariDelleLetture(letture);
+  const fineGiaBuona = migliore.ora ? fineCompatibile(migliore.ora, [migliore.oraFine, ...tempi].filter(Boolean)) : "";
+  if (cifre.ora && !fineGiaBuona) migliore = { ...migliore, ora: cifre.ora };
+  if (cifre.profondita) migliore = { ...migliore, profondita: cifre.profondita };
+  if (cifre.media && (!migliore.media || Number(cifre.media) < Number(migliore.profondita || cifre.media))) migliore = { ...migliore, media: cifre.media };
+  if (migliore.ora) {
+    const fine = fineCompatibile(migliore.ora, [cifre.oraFine, migliore.oraFine, ...tempi].filter(Boolean));
+    if (fine) migliore = { ...migliore, oraFine: fine };
+  } else if (cifre.oraFine) {
+    migliore = { ...migliore, oraFine: cifre.oraFine };
+  }
+  if (cifre.minuti && !migliore.minuti) migliore = { ...migliore, minuti: cifre.minuti };
+  if (!migliore.data && cifre.data) migliore = { ...migliore, data: cifre.data };
+  const minutiCalcolati = migliore.ora && migliore.oraFine ? minutiTra(migliore.ora, migliore.oraFine) : "";
+  if (minutiCalcolati) migliore = { ...migliore, minuti: minutiCalcolati };
+  if (migliore.profondita && migliore.media && Number(migliore.media) >= Number(migliore.profondita)) migliore = { ...migliore, media: "" };
+  const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(dataUrl, Number(migliore.minuti), Number(migliore.profondita)) : [];
+  const letto = punteggioLettura(migliore) > 0 || profilo.length > 1;
+  return { ...migliore, testo: testoMigliore, profilo, letto };
+}
+
+function unisciLetture(testi: string[]): Omit<LetturaComputer, "profilo" | "letto" | "testo"> {
+  let unito = interpretaSchermo("");
+  for (const testo of testi) {
     const campi = interpretaSchermo(testo);
-    const punti = punteggioLettura(campi);
-    if (punti > puntiMigliori) {
-      puntiMigliori = punti;
-      migliore = campi;
-      testoMigliore = testo;
+    unito = {
+      data: unito.data || campi.data,
+      ora: unito.ora || campi.ora,
+      oraFine: unito.oraFine || campi.oraFine,
+      minuti: unito.minuti || campi.minuti,
+      profondita: unito.profondita || campi.profondita,
+      media: unito.media || campi.media,
+      temperatura: unito.temperatura || campi.temperatura,
+      ossigeno: unito.ossigeno || campi.ossigeno,
+    };
+  }
+  return unito;
+}
+
+function orariDelleLetture(testi: string[]): string[] {
+  const trovati: string[] = [];
+  for (const testo of testi) {
+    for (const ora of orari(normalizza(testo))) {
+      if (!trovati.includes(ora)) trovati.push(ora);
     }
   }
-  const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(dataUrl, Number(migliore.minuti), Number(migliore.profondita)) : [];
-  const letto = puntiMigliori > 0 || profilo.length > 1;
-  return { ...migliore, testo: testoMigliore, profilo, letto };
+  return trovati;
+}
+
+function fineCompatibile(inizio: string, candidati: string[]): string {
+  let meglio = "";
+  let durataMigliore = 0;
+  for (const fine of candidati) {
+    if (!fine || fine === inizio) continue;
+    const durata = Number(minutiTra(inizio, fine));
+    if (durata < 5 || durata > 120) continue;
+    if (!meglio || durata < durataMigliore) {
+      meglio = fine;
+      durataMigliore = durata;
+    }
+  }
+  return meglio;
 }
 
 function punteggioLettura(campi: { data: string; ora: string; oraFine: string; minuti: string; profondita: string; media: string }): number {
@@ -193,13 +243,19 @@ function profonditaLibere(testo: string): string[] {
 
 function dataDi(testo: string): string {
   const match = testo.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
-  if (!match) return "";
-  const giorno = match[1].padStart(2, "0");
-  const mese = match[2].padStart(2, "0");
-  let anno = match[3];
+  if (match) return dataValida(match[1], match[2], match[3]);
+  const compatta = testo.match(/(\d{2})(\d{2})(20\d{2})/);
+  if (!compatta) return "";
+  return dataValida(compatta[1], compatta[2], compatta[3]);
+}
+
+function dataValida(giorno: string, mese: string, annoLetto: string): string {
+  const giornoOk = giorno.padStart(2, "0");
+  const meseOk = mese.padStart(2, "0");
+  let anno = annoLetto;
   if (anno.length === 2) anno = Number(anno) > 50 ? `19${anno}` : `20${anno}`;
-  if (Number(mese) < 1 || Number(mese) > 12 || Number(giorno) < 1 || Number(giorno) > 31) return "";
-  return `${anno}-${mese}-${giorno}`;
+  if (Number(meseOk) < 1 || Number(meseOk) > 12 || Number(giornoOk) < 1 || Number(giornoOk) > 31) return "";
+  return `${anno}-${meseOk}-${giornoOk}`;
 }
 
 function oraVicino(testo: string, etichetta: RegExp): string {
@@ -313,11 +369,74 @@ async function ocr(dataUrl: string): Promise<string[]> {
 async function preparaSchermo(dataUrl: string): Promise<string[]> {
   const img = await carica(dataUrl);
   if (!img) return [dataUrl];
+  const contrasto = biancoENero(img);
   const crop = ritaglioSchermo(img);
-  return crop ? [crop, dataUrl] : [dataUrl];
+  const immagini = [contrasto, crop, dataUrl].filter((immagine): immagine is string => Boolean(immagine));
+  return [...new Set(immagini)];
 }
 
-function ritaglioSchermo(img: HTMLImageElement): string | null {
+function biancoENero(img: HTMLImageElement): string | null {
+  const box = boxSchermo(img);
+  const x = box?.x ?? 0;
+  const y = box?.y ?? 0;
+  const w = box?.w ?? img.width;
+  const h = box?.h ?? img.height;
+  if (w < 40 || h < 40) return null;
+  const fattore = Math.min(2, Math.max(1, 1000 / Math.max(w, h)));
+  const width = Math.round(w * fattore);
+  const height = Math.round(h * fattore);
+  const grigio = document.createElement("canvas");
+  grigio.width = width;
+  grigio.height = height;
+  const gx = grigio.getContext("2d", { willReadFrequently: true });
+  if (!gx) return null;
+  gx.drawImage(img, x, y, w, h, 0, 0, width, height);
+  const originale = gx.getImageData(0, 0, width, height);
+  const luminanza = new Uint8Array(width * height);
+  let minimo = 255;
+  let massimo = 0;
+  for (let i = 0; i < luminanza.length; i += 1) {
+    const p = i * 4;
+    const valore = Math.round((originale.data[p] + originale.data[p + 1] + originale.data[p + 2]) / 3);
+    luminanza[i] = valore;
+    if (valore < minimo) minimo = valore;
+    if (valore > massimo) massimo = valore;
+  }
+  const scala = massimo > minimo ? 255 / (massimo - minimo) : 1;
+  const stirato = gx.createImageData(width, height);
+  for (let i = 0; i < luminanza.length; i += 1) {
+    const valore = Math.max(0, Math.min(255, Math.round((luminanza[i] - minimo) * scala)));
+    const p = i * 4;
+    stirato.data[p] = valore;
+    stirato.data[p + 1] = valore;
+    stirato.data[p + 2] = valore;
+    stirato.data[p + 3] = 255;
+  }
+  gx.putImageData(stirato, 0, 0);
+  const sfocato = document.createElement("canvas");
+  sfocato.width = width;
+  sfocato.height = height;
+  const sx = sfocato.getContext("2d", { willReadFrequently: true });
+  if (!sx) return null;
+  sx.filter = "blur(8px)";
+  sx.drawImage(grigio, 0, 0);
+  sx.filter = "none";
+  const morbido = sx.getImageData(0, 0, width, height);
+  const uscita = gx.createImageData(width, height);
+  for (let i = 0; i < luminanza.length; i += 1) {
+    const acceso = stirato.data[i * 4] > morbido.data[i * 4] + 16;
+    const colore = acceso ? 0 : 255;
+    const p = i * 4;
+    uscita.data[p] = colore;
+    uscita.data[p + 1] = colore;
+    uscita.data[p + 2] = colore;
+    uscita.data[p + 3] = 255;
+  }
+  gx.putImageData(uscita, 0, 0);
+  return grigio.toDataURL("image/png");
+}
+
+function boxSchermo(img: HTMLImageElement): { x: number; y: number; w: number; h: number } | null {
   const lunga = Math.max(img.width, img.height);
   const scale = lunga > 900 ? 900 / lunga : 1;
   const width = Math.max(1, Math.round(img.width * scale));
@@ -329,20 +448,27 @@ function ritaglioSchermo(img: HTMLImageElement): string | null {
   if (!ctx) return null;
   ctx.drawImage(img, 0, 0, width, height);
   const zona = zonaSchermo(ctx.getImageData(0, 0, width, height));
-  if (zona.w > width * 0.85 && zona.h > height * 0.85) return null;
-  const x = Math.max(0, Math.round(zona.x / scale));
-  const y = Math.max(0, Math.round(zona.y / scale));
-  const w = Math.min(img.width - x, Math.round(zona.w / scale));
-  const h = Math.min(img.height - y, Math.round(zona.h / scale));
-  if (w < 40 || h < 40) return null;
-  const fattore = Math.min(2, Math.max(1, 1200 / Math.max(w, h)));
+  if (zona.w < 40 || zona.h < 40) return null;
+  return {
+    x: Math.max(0, Math.round(zona.x / scale)),
+    y: Math.max(0, Math.round(zona.y / scale)),
+    w: Math.min(img.width - Math.max(0, Math.round(zona.x / scale)), Math.round(zona.w / scale)),
+    h: Math.min(img.height - Math.max(0, Math.round(zona.y / scale)), Math.round(zona.h / scale)),
+  };
+}
+
+function ritaglioSchermo(img: HTMLImageElement): string | null {
+  const box = boxSchermo(img);
+  if (!box) return null;
+  if (box.w > img.width * 0.85 && box.h > img.height * 0.85) return null;
+  const fattore = Math.min(2, Math.max(1, 1200 / Math.max(box.w, box.h)));
   const crop = document.createElement("canvas");
-  crop.width = Math.round(w * fattore);
-  crop.height = Math.round(h * fattore);
+  crop.width = Math.round(box.w * fattore);
+  crop.height = Math.round(box.h * fattore);
   const cx = crop.getContext("2d");
   if (!cx) return null;
   cx.imageSmoothingEnabled = true;
-  cx.drawImage(img, x, y, w, h, 0, 0, crop.width, crop.height);
+  cx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, crop.width, crop.height);
   return crop.toDataURL("image/png");
 }
 
@@ -446,6 +572,255 @@ async function tracciaProfilo(dataUrl: string, minuti: number, massima: number):
     else punti.push({ t, d });
   }
   return punti.length > 1 ? punti : [];
+}
+
+const MODELLI_CIFRE: { segno: string; griglia: number[] }[] = [
+  { segno: "1", griglia: [0x38, 0x3c, 0x3f, 0x39, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30] },
+  { segno: "3", griglia: [0x1e, 0x3b, 0x31, 0x30, 0x1c, 0x3c, 0x30, 0x30, 0x27, 0x0e] },
+  { segno: "5", griglia: [0x3e, 0x3f, 0x03, 0x03, 0x1f, 0x37, 0x30, 0x20, 0x30, 0x1e] },
+  { segno: "5", griglia: [0x3e, 0x3f, 0x03, 0x03, 0x1f, 0x3f, 0x30, 0x30, 0x3f, 0x1e] },
+  { segno: "3", griglia: [0x1e, 0x3f, 0x31, 0x30, 0x14, 0x14, 0x30, 0x30, 0x37, 0x0e] },
+  { segno: "7", griglia: [0x3f, 0x3f, 0x30, 0x18, 0x18, 0x18, 0x0c, 0x0c, 0x04, 0x06] },
+  { segno: "3", griglia: [0x1e, 0x3f, 0x33, 0x30, 0x1c, 0x1c, 0x30, 0x30, 0x37, 0x1e] },
+  { segno: "m", griglia: [0x15, 0x3f, 0x3f, 0x2f, 0x2d, 0x2d, 0x2d, 0x2d, 0x2d, 0x2d] },
+];
+
+async function leggiCifre(dataUrl: string): Promise<Pick<LetturaComputer, "data" | "ora" | "oraFine" | "minuti" | "profondita" | "media">> {
+  const vuoto = { data: "", ora: "", oraFine: "", minuti: "", profondita: "", media: "" };
+  const img = await carica(dataUrl);
+  if (!img || typeof document === "undefined") return vuoto;
+  const anteprima = Math.max(img.width, img.height) > 900 ? 900 / Math.max(img.width, img.height) : 1;
+  const aw = Math.max(1, Math.round(img.width * anteprima));
+  const ah = Math.max(1, Math.round(img.height * anteprima));
+  const sonda = document.createElement("canvas");
+  sonda.width = aw;
+  sonda.height = ah;
+  const sx = sonda.getContext("2d", { willReadFrequently: true });
+  if (!sx) return vuoto;
+  sx.drawImage(img, 0, 0, aw, ah);
+  const zona = zonaSchermo(sx.getImageData(0, 0, aw, ah));
+  const x = Math.max(0, Math.round(zona.x / anteprima));
+  const y = Math.max(0, Math.round(zona.y / anteprima));
+  const w = Math.min(img.width - x, Math.round(zona.w / anteprima));
+  const h = Math.min(img.height - y, Math.round(zona.h / anteprima));
+  if (w < 80 || h < 80) return vuoto;
+  const scala = Math.min(3, Math.max(2, 1400 / Math.max(w, h)));
+  const quadro = document.createElement("canvas");
+  quadro.width = Math.round(w * scala);
+  quadro.height = Math.round(h * scala);
+  const qx = quadro.getContext("2d", { willReadFrequently: true });
+  if (!qx) return vuoto;
+  qx.imageSmoothingEnabled = false;
+  qx.drawImage(img, x, y, w, h, 0, 0, quadro.width, quadro.height);
+  const dati = qx.getImageData(0, 0, quadro.width, quadro.height);
+  const bande = trovaBande(dati);
+  const righe = bande.map((banda) => leggiBanda(dati, banda, 0.93)).filter((riga) => riga.tempo || riga.quota);
+  const prima = righe[0];
+  let seconda = righe[1];
+  if (prima && !seconda && bande[0]) {
+    const altezza = Math.max(20, bande[0].bottom - bande[0].top);
+    const sotto = { top: Math.min(dati.height - 8, bande[bande.length - 1].bottom + 2), bottom: Math.min(dati.height, bande[bande.length - 1].bottom + Math.round(altezza * 1.15)) };
+    if (sotto.bottom - sotto.top > 12) seconda = leggiBanda(dati, sotto, 0.86);
+  }
+  return {
+    data: "",
+    ora: prima?.tempo || "",
+    oraFine: seconda?.tempo || "",
+    minuti: "",
+    profondita: prima?.quota || "",
+    media: seconda?.quota || "",
+  };
+}
+
+function trovaBande(image: ImageData): { top: number; bottom: number }[] {
+  const { data, width, height } = image;
+  const luminosita: number[] = [];
+  for (let i = 0; i < width * height; i += 8) {
+    const p = i * 4;
+    luminosita.push((data[p] + data[p + 1] + data[p + 2]) / 3);
+  }
+  luminosita.sort((a, b) => a - b);
+  const soglia = luminosita[Math.floor(luminosita.length * 0.94)] || 180;
+  const inizio = Math.floor(height * 0.42);
+  const profilo = new Array(height).fill(0);
+  for (let y = inizio; y < height; y += 1) {
+    let n = 0;
+    for (let x = 0; x < width; x += 2) {
+      const p = (y * width + x) * 4;
+      if ((data[p] + data[p + 1] + data[p + 2]) / 3 >= soglia) n += 1;
+    }
+    profilo[y] = n;
+  }
+  const bande: { top: number; bottom: number }[] = [];
+  let aperto = -1;
+  const minimo = Math.max(4, width / 80);
+  for (let y = inizio; y <= height; y += 1) {
+    const acceso = y < height && profilo[y] >= minimo;
+    if (acceso && aperto < 0) aperto = y;
+    if (!acceso && aperto >= 0) {
+      if (y - aperto > height * 0.035) bande.push({ top: aperto, bottom: y });
+      aperto = -1;
+    }
+  }
+  return bande.slice(0, 2);
+}
+
+function leggiBanda(image: ImageData, banda: { top: number; bottom: number }, percentile = 0.93): { tempo: string; quota: string } {
+  const glifi = segmenta(image, banda.top, banda.bottom, percentile);
+  if (glifi.length < 3) return { tempo: "", quota: "" };
+  const altezza = mediana(glifi.map((glifo) => glifo.h));
+  const segni = glifi.map((glifo) => ({ x: glifo.x, segno: riconosci(glifo, altezza) })).filter((voce) => voce.segno);
+  if (!segni.some((voce) => voce.segno === ":" || voce.segno === ".")) return { tempo: "", quota: "" };
+  const gruppi: { x: number; segni: string[] }[] = [];
+  for (const voce of segni) {
+    const ultimo = gruppi[gruppi.length - 1];
+    if (!ultimo || voce.x - ultimo.x > altezza * 1.6) gruppi.push({ x: voce.x, segni: [voce.segno] });
+    else {
+      ultimo.segni.push(voce.segno);
+      ultimo.x = voce.x;
+    }
+  }
+  const utili = gruppi.filter((gruppo) => gruppo.segni.some((segno) => /\d/.test(segno)));
+  return { tempo: tempoDa(utili[0]?.segni || []), quota: quotaDa(utili[1]?.segni || utili[0]?.segni || []) };
+}
+
+function segmenta(image: ImageData, top: number, bottom: number, percentile = 0.93): { x: number; y: number; w: number; h: number; griglia: number[] }[] {
+  const { data, width } = image;
+  const valori: number[] = [];
+  for (let y = top; y < bottom; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const p = (y * width + x) * 4;
+      valori.push((data[p] + data[p + 1] + data[p + 2]) / 3);
+    }
+  }
+  valori.sort((a, b) => a - b);
+  const soglia = valori[Math.floor(valori.length * percentile)] || 180;
+  const colonne = new Array(width).fill(0);
+  for (let x = 0; x < width; x += 1) {
+    for (let y = top; y < bottom; y += 1) {
+      const p = (y * width + x) * 4;
+      if ((data[p] + data[p + 1] + data[p + 2]) / 3 >= soglia) colonne[x] += 1;
+    }
+  }
+  const tratti: { x: number; w: number }[] = [];
+  let aperto = -1;
+  for (let x = 0; x <= width; x += 1) {
+    const acceso = x < width && colonne[x] > 2;
+    if (acceso && aperto < 0) aperto = x;
+    if (!acceso && aperto >= 0) {
+      if (x - aperto > 6) tratti.push({ x: aperto, w: x - aperto });
+      aperto = -1;
+    }
+  }
+  const glifi = [];
+  for (const tratto of tratti) {
+    let y0 = bottom;
+    let y1 = top;
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = tratto.x; x < tratto.x + tratto.w; x += 1) {
+        const p = (y * width + x) * 4;
+        if ((data[p] + data[p + 1] + data[p + 2]) / 3 >= soglia) {
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+    }
+    const h = y1 - y0 + 1;
+    if (h < 12 || h > (bottom - top) * 0.98 || tratto.w > 110) continue;
+    glifi.push({ x: tratto.x, y: y0, w: tratto.w, h, griglia: grigliaDi(image, tratto.x, y0, tratto.w, h, soglia) });
+  }
+  return glifi;
+}
+
+function grigliaDi(image: ImageData, x: number, y: number, w: number, h: number, soglia: number): number[] {
+  const { data, width } = image;
+  const righe: number[] = [];
+  for (let ry = 0; ry < 10; ry += 1) {
+    let riga = 0;
+    for (let cx = 0; cx < 6; cx += 1) {
+      let totale = 0;
+      let accesi = 0;
+      const yA = y + Math.floor(ry * h / 10);
+      const yB = y + Math.floor((ry + 1) * h / 10);
+      const xA = x + Math.floor(cx * w / 6);
+      const xB = x + Math.floor((cx + 1) * w / 6);
+      for (let yy = yA; yy < Math.max(yA + 1, yB); yy += 1) {
+        for (let xx = xA; xx < Math.max(xA + 1, xB); xx += 1) {
+          totale += 1;
+          const p = (yy * width + xx) * 4;
+          if ((data[p] + data[p + 1] + data[p + 2]) / 3 >= soglia) accesi += 1;
+        }
+      }
+      if (totale && accesi / totale > 0.28) riga |= 1 << cx;
+    }
+    righe.push(riga);
+  }
+  return righe;
+}
+
+function riconosci(glifo: { w: number; h: number; griglia: number[] }, altezza: number): string {
+  if (glifo.h < altezza * 0.45 && glifo.w < altezza * 0.7) {
+    const accese = glifo.griglia.map((riga, indice) => riga ? indice : -1).filter((indice) => indice >= 0);
+    if (accese.length >= 2 && accese[accese.length - 1] - accese[0] >= 4 && glifo.griglia.slice(3, 7).every((riga) => riga === 0)) return ":";
+    return ".";
+  }
+  let meglio = "";
+  let distanza = 24;
+  for (const modello of MODELLI_CIFRE) {
+    let n = 0;
+    for (let i = 0; i < 10; i += 1) n += bitDiversi(glifo.griglia[i] || 0, modello.griglia[i] || 0);
+    if (n < distanza) {
+      distanza = n;
+      meglio = modello.segno;
+    }
+  }
+  if (meglio) return meglio;
+  if (glifo.w < glifo.h * 0.42) return "1";
+  return "";
+}
+
+function bitDiversi(a: number, b: number): number {
+  let n = a ^ b;
+  let totale = 0;
+  while (n) {
+    totale += n & 1;
+    n >>= 1;
+  }
+  return totale;
+}
+
+function tempoDa(segni: string[]): string {
+  const testo = segni.filter((segno) => segno !== "m" && segno !== ".").join("");
+  const conDuePunti = testo.match(/(\d):(\d{2})/);
+  if (conDuePunti && Number(conDuePunti[1]) <= 23 && Number(conDuePunti[2]) <= 59) return `${conDuePunti[1].padStart(2, "0")}:${conDuePunti[2]}`;
+  const cifre = testo.replace(/\D/g, "");
+  if (cifre.length === 4) {
+    const ora = `${cifre.slice(0, 2)}:${cifre.slice(2)}`;
+    return Number(cifre.slice(0, 2)) <= 23 && Number(cifre.slice(2)) <= 59 ? ora : "";
+  }
+  if (cifre.length === 3) return `0${cifre[0]}:${cifre.slice(1)}`;
+  return "";
+}
+
+function quotaDa(segni: string[]): string {
+  const testo = segni.filter((segno) => segno !== ":" && segno !== "m").join("");
+  const conPunto = testo.match(/(\d{1,2})\.(\d)/);
+  if (conPunto) {
+    const n = Number(`${conPunto[1]}.${conPunto[2]}`);
+    return n >= 1 && n <= 120 ? n.toFixed(1) : "";
+  }
+  const cifre = testo.replace(/\D/g, "");
+  if (cifre.length >= 2) {
+    const n = Number(`${cifre.slice(0, -1)}.${cifre.slice(-1)}`);
+    return n >= 1 && n <= 120 ? n.toFixed(1) : "";
+  }
+  return "";
+}
+
+function mediana(valori: number[]): number {
+  if (!valori.length) return 1;
+  const ordinati = [...valori].sort((a, b) => a - b);
+  return ordinati[Math.floor(ordinati.length / 2)] || 1;
 }
 
 function carica(src: string): Promise<HTMLImageElement | null> {
