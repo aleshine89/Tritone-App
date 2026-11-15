@@ -10,7 +10,7 @@ import { ScambioLogbook } from "@/components/logbook-uddf";
 import { addLogPhoto, deleteLogPhoto, deleteLogVoice, deleteLogbook, getLogVoice, listLogPhotos, listLogbook, saveLogVoice, saveLogbook, accettaCondivisione, cercaCompagni, cercaDivingGuida, guideDelDiving, condividiImmersione, chiediConvalida, leggiCondivisione, listBrevetti, type CompagnoLogbook, type LogEntry } from "@/lib/fondale.functions";
 import { ScadenzaField } from "@/components/scadenza-field";
 import { formatDay } from "@/lib/format";
-import { leggiComputer } from "@/lib/leggi-computer";
+import { leggiComputer, type LetturaComputer } from "@/lib/leggi-computer";
 import { CHIAVE_PIANO_LOGBOOK } from "@/lib/planner";
 import { messaggioErrore, useT } from "@/lib/i18n";
 import { isStaff } from "@/lib/forms";
@@ -111,6 +111,22 @@ function leggiPianoLogbook(): { profondita: string; minuti: string; miscela: "Ar
   }
 }
 
+function unisciPagine(base: LetturaComputer, aggiunta: LetturaComputer): LetturaComputer {
+  const tieni = (prima: string, dopo: string) => prima || dopo;
+  return {
+    data: tieni(base.data, aggiunta.data),
+    ora: tieni(base.ora, aggiunta.ora),
+    oraFine: tieni(base.oraFine, aggiunta.oraFine),
+    minuti: tieni(base.minuti, aggiunta.minuti),
+    profondita: tieni(base.profondita, aggiunta.profondita),
+    media: tieni(base.media, aggiunta.media),
+    temperatura: tieni(base.temperatura, aggiunta.temperatura),
+    ossigeno: tieni(base.ossigeno, aggiunta.ossigeno),
+    profilo: base.profilo.length > 1 ? base.profilo : aggiunta.profilo,
+    letto: true,
+  };
+}
+
 function Logbook() {
   const t = useT();
   const frame = useFondale();
@@ -178,43 +194,63 @@ function Logbook() {
     setSpeciePronte(true);
   }
 
-  async function scansionaComputer(file: File | undefined) {
-    if (!file) return;
+  async function scansionaComputer(lista: File[]) {
+    const files = lista.filter((file) => !file.type || file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(file.name)).slice(0, 6);
+    if (!files.length) {
+      setScanMsg(t("Non ho letto lo schermo. Tieni la foto dritta e riprova."));
+      return;
+    }
     setBusy(true);
-    setScanMsg(null);
+    setScanMsg(t("Leggo la foto {n} di {totale}.", { n: 1, totale: files.length }));
     setError(null);
     try {
-      const foto = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("Foto non letta."));
-        reader.readAsDataURL(file);
-      });
-      const letto = await leggiComputer(foto);
-      if (!letto.letto) {
+      let unito: Awaited<ReturnType<typeof leggiComputer>> | null = null;
+      let lette = 0;
+      for (let i = 0; i < files.length; i += 1) {
+        if (files.length > 1) setScanMsg(t("Leggo la foto {n} di {totale}.", { n: i + 1, totale: files.length }));
+        const foto = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Foto non letta."));
+          reader.readAsDataURL(files[i]);
+        });
+        const letto = await leggiComputer(foto);
+        if (!letto.letto) continue;
+        lette += 1;
+        unito = unito ? unisciPagine(unito, letto) : letto;
+      }
+      if (!unito || !lette) {
         setScanMsg(t("Non ho letto lo schermo. Tieni la foto dritta e riprova."));
         return;
       }
       setDraft((current) => ({
         ...current,
-        data: letto.data || current.data,
-        ora: letto.ora || current.ora,
-        oraFine: letto.oraFine || current.oraFine,
-        minuti: letto.minuti || current.minuti,
-        profondita: letto.profondita || current.profondita,
-        media: letto.media || current.media,
-        profilo: letto.profilo.length > 1 ? letto.profilo : current.profilo,
+        data: unito.data || current.data,
+        ora: unito.ora || current.ora,
+        oraFine: unito.oraFine || current.oraFine,
+        minuti: unito.minuti || current.minuti,
+        profondita: unito.profondita || current.profondita,
+        media: unito.media || current.media,
+        temperatura: unito.temperatura || current.temperatura,
+        ossigeno: unito.ossigeno || current.ossigeno,
+        profilo: unito.profilo.length > 1 ? unito.profilo : current.profilo,
       }));
       const pezzi = [
-        letto.data ? t("data") : "",
-        letto.ora ? t("ora di inizio") : "",
-        letto.oraFine ? t("ora di fine") : "",
-        letto.minuti ? t("tempo") : "",
-        letto.profondita ? t("massima") : "",
-        letto.media ? t("media") : "",
-        letto.profilo.length > 1 ? t("profilo") : "",
+        unito.data ? t("data") : "",
+        unito.ora ? t("ora di inizio") : "",
+        unito.oraFine ? t("ora di fine") : "",
+        unito.minuti ? t("tempo") : "",
+        unito.profondita ? t("massima") : "",
+        unito.media ? t("media") : "",
+        unito.temperatura ? t("temperatura") : "",
+        unito.ossigeno ? t("ossigeno") : "",
+        unito.profilo.length > 1 ? t("profilo") : "",
       ].filter(Boolean);
-      setScanMsg(t("Ho letto {cose}. Controlla prima di salvare.", { cose: pezzi.join(", ") }));
+      setScanMsg(
+        files.length > 1
+          ? t("Ho letto {n} foto su {totale}: {cose}. Controlla prima di salvare.", { n: lette, totale: files.length, cose: pezzi.join(", ") })
+          : t("Ho letto {cose}. Controlla prima di salvare.", { cose: pezzi.join(", ") }),
+      );
     } catch (reason) {
       setScanMsg(messaggioErrore(reason, "Non ho letto lo schermo."));
     } finally {
@@ -659,13 +695,16 @@ function Logbook() {
                   {t("Scansiona")}
                 </button>
                 {scanAperto ? (
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanCamera.current?.click()}>{t("Scatta foto")}</button>
-                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanGalleria.current?.click()}>{t("Foto dal telefono")}</button>
-                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanFile.current?.click()}>{t("Scansiona file")}</button>
-                    <input ref={scanCamera} type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
-                    <input ref={scanGalleria} type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
-                    <input ref={scanFile} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
+                  <div className="mt-2">
+                    <p className="mb-2 text-xs text-mist">{t("Se il computer ha più pagine, scegline più di una. Con la fotocamera scatta una pagina e poi l'altra.")}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanCamera.current?.click()}>{t("Scatta foto")}</button>
+                      <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanGalleria.current?.click()}>{t("Foto dal telefono")}</button>
+                      <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanFile.current?.click()}>{t("Scansiona file")}</button>
+                      <input ref={scanCamera} type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                      <input ref={scanGalleria} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                      <input ref={scanFile} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" multiple className="sr-only" onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void scansionaComputer(files); }} />
+                    </div>
                   </div>
                 ) : null}
                 {scanMsg ? <p className="mt-2 text-sm text-mist">{scanMsg}</p> : null}
