@@ -10,6 +10,7 @@ import { ScambioLogbook } from "@/components/logbook-uddf";
 import { addLogPhoto, deleteLogPhoto, deleteLogVoice, deleteLogbook, getLogVoice, listLogPhotos, listLogbook, saveLogVoice, saveLogbook, accettaCondivisione, cercaCompagni, cercaDivingGuida, guideDelDiving, condividiImmersione, chiediConvalida, leggiCondivisione, listBrevetti, type CompagnoLogbook, type LogEntry } from "@/lib/fondale.functions";
 import { ScadenzaField } from "@/components/scadenza-field";
 import { formatDay } from "@/lib/format";
+import { leggiComputer } from "@/lib/leggi-computer";
 import { CHIAVE_PIANO_LOGBOOK } from "@/lib/planner";
 import { messaggioErrore, useT } from "@/lib/i18n";
 import { isStaff } from "@/lib/forms";
@@ -79,6 +80,11 @@ const empty = {
   profonditaPrevista: "",
   autorespiratore: "",
   brevetto: "",
+  media: "",
+  acqua: "" as "" | "dolce" | "salata",
+  muta: "",
+  sottomuta: "",
+  pesi: "",
   viaggioGruppoId: null as number | null,
   convalidaGuida: "",
 };
@@ -132,6 +138,11 @@ function Logbook() {
   const [speciePronte, setSpeciePronte] = useState(true);
   const [fileScelte, setFileScelte] = useState<UddfRiga[] | null>(null);
   const [brevetti, setBrevetti] = useState<string[]>([]);
+  const [scanAperto, setScanAperto] = useState(false);
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const scanCamera = useRef<HTMLInputElement>(null);
+  const scanGalleria = useRef<HTMLInputElement>(null);
+  const scanFile = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const voiceReq = useRef(0);
   const openedNew = useRef(false);
@@ -161,8 +172,54 @@ function Logbook() {
     setOpen(true);
     setError(null);
     setSaved(null);
+    setScanAperto(false);
+    setScanMsg(null);
     setSpecieIds([]);
     setSpeciePronte(true);
+  }
+
+  async function scansionaComputer(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setScanMsg(null);
+    setError(null);
+    try {
+      const foto = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Foto non letta."));
+        reader.readAsDataURL(file);
+      });
+      const letto = await leggiComputer(foto);
+      if (!letto.letto) {
+        setScanMsg(t("Non ho letto lo schermo. Tieni la foto dritta e riprova."));
+        return;
+      }
+      setDraft((current) => ({
+        ...current,
+        data: letto.data || current.data,
+        ora: letto.ora || current.ora,
+        oraFine: letto.oraFine || current.oraFine,
+        minuti: letto.minuti || current.minuti,
+        profondita: letto.profondita || current.profondita,
+        media: letto.media || current.media,
+        profilo: letto.profilo.length > 1 ? letto.profilo : current.profilo,
+      }));
+      const pezzi = [
+        letto.data ? t("data") : "",
+        letto.ora ? t("ora di inizio") : "",
+        letto.oraFine ? t("ora di fine") : "",
+        letto.minuti ? t("tempo") : "",
+        letto.profondita ? t("massima") : "",
+        letto.media ? t("media") : "",
+        letto.profilo.length > 1 ? t("profilo") : "",
+      ].filter(Boolean);
+      setScanMsg(t("Ho letto {cose}. Controlla prima di salvare.", { cose: pezzi.join(", ") }));
+    } catch (reason) {
+      setScanMsg(messaggioErrore(reason, "Non ho letto lo schermo."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -596,24 +653,33 @@ function Logbook() {
             <h2 id={draft.id ? "logbook-finestra" : undefined} className="text-2xl">{shareId ? t("Modifica immersione") : draft.id ? t("Modifica immersione") : t("Nuova immersione")}</h2>
             {frame.profile ? <p className="mt-1 text-sm text-mist">{`${frame.profile.nome} ${frame.profile.cognome}`.trim()}</p> : null}
             {shareNome ? <p className="mt-1 text-xs text-lagoon">{t("condivisa da {nome}", { nome: shareNome })}</p> : null}
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {!draft.id ? (
+              <div className="mt-4">
+                <button type="button" className="min-h-11 rounded-full bg-lagoon px-4 text-sm font-medium" onClick={() => setScanAperto((aperto) => !aperto)}>
+                  {t("Scansiona")}
+                </button>
+                {scanAperto ? (
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanCamera.current?.click()}>{t("Scatta foto")}</button>
+                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanGalleria.current?.click()}>{t("Foto dal telefono")}</button>
+                    <button type="button" className="min-h-11 rounded-xl border border-line px-2 text-sm" onClick={() => scanFile.current?.click()}>{t("Scansiona file")}</button>
+                    <input ref={scanCamera} type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
+                    <input ref={scanGalleria} type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
+                    <input ref={scanFile} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.heic" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void scansionaComputer(file); }} />
+                  </div>
+                ) : null}
+                {scanMsg ? <p className="mt-2 text-sm text-mist">{scanMsg}</p> : null}
+                {draft.profilo.length > 1 ? <div className="relative mt-3 h-16 overflow-hidden"><CurvaProfilo punti={draft.profilo} /></div> : null}
+              </div>
+            ) : null}
+            <h3 className="mt-5 text-sm font-medium uppercase tracking-wide text-lagoon">{t("Obbligatori")}</h3>
+            <p className="mt-1 text-xs text-mist">{t("Quelli del libretto.")}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <Field label={t("Data")}>
                 <ScadenzaField value={draft.data} onChange={(data) => setDraft({ ...draft, data })} />
               </Field>
               <Field label={t("Località")}>
                 <input required value={draft.localita} onChange={(event) => setDraft({ ...draft, localita: event.target.value })} className={inputClass} placeholder={t("Passetto, Conero")} />
-              </Field>
-              <Field label={t("Punto")}>
-                <input value={draft.punto} onChange={(event) => setDraft({ ...draft, punto: event.target.value })} className={inputClass} />
-              </Field>
-              <Field label={t("Compagno")}>
-                <input value={draft.buddy} onChange={(event) => setDraft({ ...draft, buddy: event.target.value })} className={inputClass} />
-              </Field>
-              <Field label={t("Profondità max (m)")}>
-                <input inputMode="decimal" value={draft.profondita} onChange={(event) => setDraft({ ...draft, profondita: event.target.value })} className={inputClass} />
-              </Field>
-              <Field label={t("Profondità programmata (m)")}>
-                <input inputMode="decimal" value={draft.profonditaPrevista} onChange={(event) => setDraft({ ...draft, profonditaPrevista: event.target.value })} className={inputClass} />
               </Field>
               <Field label={t("Ora di inizio")}>
                 <input type="time" value={draft.ora} onChange={(event) => setDraft({ ...draft, ora: event.target.value.slice(0, 5) })} className={inputClass} />
@@ -621,28 +687,12 @@ function Logbook() {
               <Field label={t("Ora di fine")}>
                 <input type="time" value={draft.oraFine} onChange={(event) => setDraft({ ...draft, oraFine: event.target.value.slice(0, 5) })} className={inputClass} />
               </Field>
-              <Field label={t("Tempo (minuti)")}>
-                <input inputMode="numeric" value={draft.minuti} onChange={(event) => setDraft({ ...draft, minuti: event.target.value })} className={inputClass} />
+              <Field label={t("Profondità max (m)")}>
+                <input inputMode="decimal" value={draft.profondita} onChange={(event) => setDraft({ ...draft, profondita: event.target.value })} className={inputClass} />
               </Field>
-              <fieldset className="sm:col-span-2">
-                <legend className="mb-1 text-sm text-mist">{t("Decompressione")}</legend>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "si" ? "bg-lagoon font-medium text-ink" : "border border-line"}`}
-                    onClick={() => setDraft({ ...draft, decompressione: "si" })}
-                  >
-                    {t("Sì")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "no" ? "bg-lagoon font-medium text-ink" : "border border-line"}`}
-                    onClick={() => setDraft({ ...draft, decompressione: "no" })}
-                  >
-                    {t("No")}
-                  </button>
-                </div>
-              </fieldset>
+              <Field label={t("Profondità programmata (m)")}>
+                <input inputMode="decimal" value={draft.profonditaPrevista} onChange={(event) => setDraft({ ...draft, profonditaPrevista: event.target.value })} className={inputClass} />
+              </Field>
               <Field label={t("Tipo di autorespiratore")}>
                 <select value={draft.autorespiratore} onChange={(event) => setDraft({ ...draft, autorespiratore: event.target.value })} className={inputClass}>
                   <option value="">—</option>
@@ -651,15 +701,6 @@ function Logbook() {
                   <option value="Aria di superficie">{t("Aria di superficie")}</option>
                 </select>
               </Field>
-              <Field label={t("Centro")}>
-                <input value={draft.centro} onChange={(event) => setDraft({ ...draft, centro: event.target.value })} className={inputClass} />
-              </Field>
-              <Field label={t("Tipo di brevetto")}>
-                <input value={draft.brevetto} onChange={(event) => setDraft({ ...draft, brevetto: event.target.value })} className={inputClass} list="brevetti-log" />
-                <datalist id="brevetti-log">
-                  {brevetti.map((voce) => <option key={voce} value={voce} />)}
-                </datalist>
-              </Field>
               <Field label={t("Miscela")}>
                 <select value={draft.miscela} onChange={(event) => setDraft({ ...draft, miscela: event.target.value })} className={inputClass}>
                   <option value="Aria">{t("Aria")}</option>
@@ -667,6 +708,38 @@ function Logbook() {
                   <option value="Trimix">Trimix</option>
                 </select>
               </Field>
+              <Field label={t("Tipo di brevetto")}>
+                <input value={draft.brevetto} onChange={(event) => setDraft({ ...draft, brevetto: event.target.value })} className={inputClass} list="brevetti-log" />
+                <datalist id="brevetti-log">
+                  {brevetti.map((voce) => <option key={voce} value={voce} />)}
+                </datalist>
+              </Field>
+              <Field label={t("Centro")}>
+                <input value={draft.centro} onChange={(event) => setDraft({ ...draft, centro: event.target.value })} className={inputClass} />
+              </Field>
+            </div>
+            <h3 className="mt-5 text-sm font-medium uppercase tracking-wide text-lagoon">{t("Facoltativi")}</h3>
+            <p className="mt-1 text-xs text-mist">{t("Il resto. La foto del computer non li inventa.")}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label={t("Punto")}>
+                <input value={draft.punto} onChange={(event) => setDraft({ ...draft, punto: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Compagno")}>
+                <input value={draft.buddy} onChange={(event) => setDraft({ ...draft, buddy: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Tempo (minuti)")}>
+                <input inputMode="numeric" value={draft.minuti} onChange={(event) => setDraft({ ...draft, minuti: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Media (m)")}>
+                <input inputMode="decimal" value={draft.media} onChange={(event) => setDraft({ ...draft, media: event.target.value })} className={inputClass} />
+              </Field>
+              <fieldset className="sm:col-span-2">
+                <legend className="mb-1 text-sm text-mist">{t("Decompressione")}</legend>
+                <div className="flex gap-2">
+                  <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "si" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setDraft({ ...draft, decompressione: "si" })}>{t("Sì")}</button>
+                  <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.decompressione === "no" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setDraft({ ...draft, decompressione: "no" })}>{t("No")}</button>
+                </div>
+              </fieldset>
               <Field label={t("Ossigeno %")}>
                 <input inputMode="decimal" value={draft.ossigeno} onChange={(event) => setDraft({ ...draft, ossigeno: event.target.value })} className={inputClass} />
               </Field>
@@ -675,6 +748,22 @@ function Logbook() {
               </Field>
               <Field label={t("Visibilità (m)")}>
                 <input inputMode="decimal" value={draft.visibilita} onChange={(event) => setDraft({ ...draft, visibilita: event.target.value })} className={inputClass} />
+              </Field>
+              <fieldset className="sm:col-span-2">
+                <legend className="mb-1 text-sm text-mist">{t("Acqua")}</legend>
+                <div className="flex gap-2">
+                  <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.acqua === "salata" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setDraft({ ...draft, acqua: draft.acqua === "salata" ? "" : "salata" })}>{t("Salata")}</button>
+                  <button type="button" className={`min-h-11 flex-1 rounded-full px-4 text-sm ${draft.acqua === "dolce" ? "bg-lagoon font-medium text-ink" : "border border-line"}`} onClick={() => setDraft({ ...draft, acqua: draft.acqua === "dolce" ? "" : "dolce" })}>{t("Dolce")}</button>
+                </div>
+              </fieldset>
+              <Field label={t("Muta")}>
+                <input value={draft.muta} onChange={(event) => setDraft({ ...draft, muta: event.target.value })} className={inputClass} placeholder={t("5 mm")} />
+              </Field>
+              <Field label={t("Sottomuta")}>
+                <input value={draft.sottomuta} onChange={(event) => setDraft({ ...draft, sottomuta: event.target.value })} className={inputClass} />
+              </Field>
+              <Field label={t("Pesi (kg)")}>
+                <input inputMode="decimal" value={draft.pesi} onChange={(event) => setDraft({ ...draft, pesi: event.target.value })} className={inputClass} />
               </Field>
               <label className="block text-sm sm:col-span-2">
                 <span className="mb-1 block text-mist">{t("Note")}</span>
@@ -1342,6 +1431,11 @@ function VistaImmersione({
     profonditaPrevista: string;
     autorespiratore: string;
     brevetto: string;
+    media: string;
+    acqua: "" | "dolce" | "salata";
+    muta: string;
+    sottomuta: string;
+    pesi: string;
     lat: string;
     lng: string;
     foto: number;
@@ -1385,6 +1479,11 @@ function VistaImmersione({
   if (draft.ossigeno) righe.push({ etichetta: t("Ossigeno %"), valore: draft.ossigeno });
   if (draft.temperatura) righe.push({ etichetta: t("Temperatura (°C)"), valore: draft.temperatura });
   if (draft.visibilita) righe.push({ etichetta: t("Visibilità (m)"), valore: draft.visibilita });
+  if (draft.media) righe.push({ etichetta: t("Media (m)"), valore: `${draft.media} m` });
+  if (draft.acqua) righe.push({ etichetta: t("Acqua"), valore: draft.acqua === "dolce" ? t("Dolce") : t("Salata") });
+  if (draft.muta) righe.push({ etichetta: t("Muta"), valore: draft.muta });
+  if (draft.sottomuta) righe.push({ etichetta: t("Sottomuta"), valore: draft.sottomuta });
+  if (draft.pesi) righe.push({ etichetta: t("Pesi (kg)"), valore: draft.pesi });
   righe.push({ etichetta: t("Decompressione"), valore: eDeco(draft) ? t("Sì") : t("No") });
 
   return (

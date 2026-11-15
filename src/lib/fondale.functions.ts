@@ -583,6 +583,11 @@ async function assicuraLibretto(sql: Sql) {
   if (librettoPronto) return;
   await sql`alter table logbook_entries add column if not exists autorespiratore text not null default ''`;
   await sql`alter table logbook_entries add column if not exists brevetto text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists avg_m text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists acqua text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists muta text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists sottomuta text not null default ''`;
+  await sql`alter table logbook_entries add column if not exists pesi text not null default ''`;
   librettoPronto = true;
 }
 
@@ -2852,6 +2857,11 @@ export type LogEntry = {
   profonditaPrevista: string;
   autorespiratore: string;
   brevetto: string;
+  media: string;
+  acqua: "" | "dolce" | "salata";
+  muta: string;
+  sottomuta: string;
+  pesi: string;
   viaggioGruppoId: number | null;
   convalidaGuida: string;
 };
@@ -2884,6 +2894,8 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "condi
   const firma = asText(raw.guidaFirma);
   const respiratori = ["Circuito aperto", "Rebreather", "Aria di superficie"];
   const autorespiratore = asText(raw.autorespiratore);
+  const acqua = asText(raw.acqua);
+  if (acqua !== "" && acqua !== "dolce" && acqua !== "salata") throw new Error("Scegli acqua dolce o salata.");
   return {
     id: Number.isInteger(id) && id > 0 ? id : null,
     data,
@@ -2908,6 +2920,11 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "condi
     profonditaPrevista: num("profonditaPrevista", 400),
     autorespiratore: respiratori.includes(autorespiratore) ? autorespiratore : "",
     brevetto: asText(raw.brevetto).trim().slice(0, 120),
+    media: num("media", 400),
+    acqua,
+    muta: asText(raw.muta).trim().slice(0, 80),
+    sottomuta: asText(raw.sottomuta).trim().slice(0, 80),
+    pesi: num("pesi", 40),
     profilo: profiloDi(raw.profilo),
   };
 }
@@ -2954,6 +2971,11 @@ function toLog(row: {
   profondita_prevista: string;
   autorespiratore: string;
   brevetto: string;
+  avg_m: string;
+  acqua: string;
+  muta: string;
+  sottomuta: string;
+  pesi: string;
   viaggio_gruppo_id: number | null;
   convalida_guida: string | null;
 }): LogEntry {
@@ -2986,6 +3008,11 @@ function toLog(row: {
     profonditaPrevista: row.profondita_prevista ?? "",
     autorespiratore: row.autorespiratore ?? "",
     brevetto: row.brevetto ?? "",
+    media: row.avg_m ?? "",
+    acqua: row.acqua === "dolce" || row.acqua === "salata" ? row.acqua : "",
+    muta: row.muta ?? "",
+    sottomuta: row.sottomuta ?? "",
+    pesi: row.pesi ?? "",
     viaggioGruppoId: row.viaggio_gruppo_id == null ? null : Number(row.viaggio_gruppo_id),
     convalidaGuida: row.convalida_guida ?? "",
   };
@@ -3044,11 +3071,16 @@ export const listLogbook = createServerFn({ method: "POST" })
       profondita_prevista: string;
       autorespiratore: string;
       brevetto: string;
+      avg_m: string;
+      acqua: string;
+      muta: string;
+      sottomuta: string;
+      pesi: string;
       viaggio_gruppo_id: number | null;
       convalida_guida: string | null;
     }>`
       select id, dive_date::text as dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, dive_time, condivisa_da, dive_profile, decompressione,
-        ora_fine, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto, viaggio_gruppo_id,
+        ora_fine, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto, avg_m, acqua, muta, sottomuta, pesi, viaggio_gruppo_id,
         (
           select trim(coalesce(p.cognome, '') || ' ' || coalesce(p.nome, ''))
           from logbook_convalide v
@@ -3105,6 +3137,11 @@ export const saveLogbook = createServerFn({ method: "POST" })
             profondita_prevista = ${data.profonditaPrevista},
             autorespiratore = ${data.autorespiratore},
             brevetto = ${data.brevetto},
+            avg_m = ${data.media},
+            acqua = ${data.acqua},
+            muta = ${data.muta},
+            sottomuta = ${data.sottomuta},
+            pesi = ${data.pesi},
             guida_firma = case when ${data.guidaFirma} = '' then guida_firma else ${data.guidaFirma} end,
             updated_at = now()
         where id = ${data.id} and user_id = ${context.userId}
@@ -3118,12 +3155,13 @@ export const saveLogbook = createServerFn({ method: "POST" })
     const inserted = await sql<{ id: number }>`
       insert into logbook_entries (
         user_id, dive_date, site, point, depth_m, minutes, buddy, mix, oxygen, temp_c, visibility_m, notes, lat, lng, decompressione,
-        dive_time, ora_fine, dive_profile, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto
+        dive_time, ora_fine, dive_profile, centro, guida_nome, guida_firma, profondita_prevista, autorespiratore, brevetto, avg_m, acqua, muta, sottomuta, pesi
       ) values (
         ${context.userId}, ${data.data}, ${data.localita}, ${data.punto}, ${data.profondita},
         ${data.minuti}, ${data.buddy}, ${data.miscela}, ${data.ossigeno}, ${data.temperatura},
         ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}, ${data.decompressione},
-        ${data.ora}, ${data.oraFine}, ${JSON.stringify(data.profilo)}, ${data.centro}, ${data.guidaNome}, ${data.guidaFirma}, ${data.profonditaPrevista}, ${data.autorespiratore}, ${data.brevetto}
+        ${data.ora}, ${data.oraFine}, ${JSON.stringify(data.profilo)}, ${data.centro}, ${data.guidaNome}, ${data.guidaFirma}, ${data.profonditaPrevista}, ${data.autorespiratore}, ${data.brevetto},
+        ${data.media}, ${data.acqua}, ${data.muta}, ${data.sottomuta}, ${data.pesi}
       )
       returning id
     `;
