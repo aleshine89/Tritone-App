@@ -69,15 +69,17 @@ function punteggioLettura(campi: { data: string; ora: string; oraFine: string; m
   let punti = 0;
   if (campi.profondita) punti += 4;
   if (campi.media) punti += 2;
-  if (campi.data) punti += 1;
+  if (campi.data) punti += 2;
+  if (campi.ora) punti += 2;
+  if (campi.oraFine) punti += 2;
   if (minuti >= 5 && minuti <= 120) punti += 4;
-  if (campi.ora && campi.oraFine && minuti >= 5) punti += 2;
   return punti;
 }
 
 function normalizza(testo: string): string {
   return testo
     .replace(/(\d)\s*:\s*(\d)/g, "$1:$2")
+    .replace(/(\d{1,2})\s*[/]\s*(\d{2})\b/g, (_tutto, ore, minuti) => (Number(ore) <= 23 && Number(minuti) <= 59 ? `${ore}:${minuti}` : `${ore}/${minuti}`))
     .replace(/(\d)\s*[.,]\s*(\d)/g, "$1.$2")
     .replace(/\s+/g, " ")
     .trim();
@@ -312,7 +314,7 @@ async function preparaSchermo(dataUrl: string): Promise<string[]> {
   const img = await carica(dataUrl);
   if (!img) return [dataUrl];
   const crop = ritaglioSchermo(img);
-  return crop ? [dataUrl, crop] : [dataUrl];
+  return crop ? [crop, dataUrl] : [dataUrl];
 }
 
 function ritaglioSchermo(img: HTMLImageElement): string | null {
@@ -346,39 +348,47 @@ function ritaglioSchermo(img: HTMLImageElement): string | null {
 
 function zonaSchermo(image: ImageData): { x: number; y: number; w: number; h: number } {
   const { data, width, height } = image;
-  let minX = width;
-  let minY = height;
-  let maxX = 0;
-  let maxY = 0;
-  let n = 0;
-  for (let y = 0; y < height; y += 2) {
-    for (let x = 0; x < width; x += 2) {
+  const step = 4;
+  const colonne = new Array(Math.ceil(width / step)).fill(0);
+  const righe = new Array(Math.ceil(height / step)).fill(0);
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
       const i = (y * width + x) * 4;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      const massimo = Math.max(r, g, b);
-      const minimo = Math.min(r, g, b);
-      const accesa = massimo > 150 && massimo - minimo > 40;
-      const gialla = r > 165 && g > 145 && b < 150;
-      if (!accesa && !gialla) continue;
-      n += 1;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+      if (b <= r + 8 || b <= 45 || g <= 25) continue;
+      colonne[Math.floor(x / step)] += 1;
+      righe[Math.floor(y / step)] += 1;
     }
   }
-  if (n < 30 || maxX <= minX || maxY <= minY) return { x: 0, y: 0, w: width, h: height };
-  const padX = Math.round((maxX - minX) * 0.15);
-  const padY = Math.round((maxY - minY) * 0.22);
-  const x = Math.max(0, minX - padX);
-  const y = Math.max(0, minY - padY);
-  const w = Math.min(width - x, maxX - minX + padX * 2);
-  const h = Math.min(height - y, maxY - minY + padY * 2);
-  if (w > width * 0.8 && h > height * 0.8) return { x: 0, y: 0, w: width, h: height };
+  const sx = fasciaBlu(colonne);
+  const sy = fasciaBlu(righe);
+  if (!sx || !sy) return { x: 0, y: 0, w: width, h: height };
+  const grezzoX = sx[0] * step;
+  const grezzoY = sy[0] * step;
+  const grezzoW = Math.min(width, (sx[1] + 1) * step) - grezzoX;
+  const grezzoH = Math.min(height, (sy[1] + 1) * step) - grezzoY;
+  const x = Math.max(0, grezzoX - Math.round(grezzoW * 0.04));
+  const y = Math.max(0, grezzoY - Math.round(grezzoH * 0.06));
+  const x2 = Math.min(width, grezzoX + grezzoW + Math.round(grezzoW * 0.06));
+  const y2 = Math.min(height, grezzoY + grezzoH + Math.round(grezzoH * 0.24));
+  const w = x2 - x;
+  const h = y2 - y;
   if (w < width * 0.12 || h < height * 0.08) return { x: 0, y: 0, w: width, h: height };
   return { x, y, w, h };
+}
+
+function fasciaBlu(conteggi: number[]): [number, number] | null {
+  const tetto = Math.max(...conteggi, 0);
+  if (tetto < 4) return null;
+  const soglia = Math.max(4, Math.round(tetto * 0.18));
+  let inizio = 0;
+  let fine = conteggi.length - 1;
+  while (inizio < fine && conteggi[inizio] < soglia) inizio += 1;
+  while (fine > inizio && conteggi[fine] < soglia) fine -= 1;
+  if (fine - inizio < 4) return null;
+  return [inizio, fine];
 }
 
 async function tracciaProfilo(dataUrl: string, minuti: number, massima: number): Promise<PuntoProfilo[]> {
