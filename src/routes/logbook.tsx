@@ -217,7 +217,7 @@ function Logbook() {
           reader.readAsDataURL(files[i]);
         });
         const letto = await leggiComputer(foto);
-        if (letto.testo.trim()) visto = letto.testo.replace(/\s+/g, " ").trim().slice(0, 140);
+        if (letto.testo.trim()) visto = letto.testo.replace(/\s+/g, " ").trim().slice(0, 80);
         if (!letto.letto) continue;
         lette += 1;
         unito = unito ? unisciPagine(unito, letto) : letto;
@@ -711,7 +711,7 @@ function Logbook() {
                   </div>
                 ) : null}
                 {scanMsg ? <p className="mt-2 text-sm text-mist">{scanMsg}</p> : null}
-                {draft.profilo.length > 1 ? <div className="relative mt-3 h-16 overflow-hidden"><CurvaProfilo punti={draft.profilo} /></div> : null}
+                {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
               </div>
             ) : null}
             <h3 className="mt-5 text-sm font-medium uppercase tracking-wide text-lagoon">{t("Obbligatori")}</h3>
@@ -828,7 +828,7 @@ function Logbook() {
                       }}
                     />
                   </label>
-                  {draft.profilo.length > 1 ? <div className="relative mt-3 h-16 overflow-hidden"><CurvaProfilo punti={draft.profilo} /></div> : null}
+                  {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
                   {fileScelte ? (
                     <ul className="mt-3 grid gap-2">
                       {fileScelte.map((riga, index) => (
@@ -1545,11 +1545,7 @@ function VistaImmersione({
           </div>
         ) : null}
       </dl>
-      {draft.profilo.length > 1 ? (
-        <div className="relative mt-4 h-24 overflow-hidden">
-          <CurvaProfilo punti={draft.profilo} />
-        </div>
-      ) : null}
+      {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
       {draft.guidaFirma ? (
         <div className="mt-4">
           <p className="mb-1 text-xs text-lagoon">{t("Validata da {nome}", { nome: draft.guidaNome || t("la guida") })}</p>
@@ -1664,6 +1660,18 @@ function gruppiAnno(rows: LogEntry[]): { anno: string; righe: LogEntry[] }[] {
   return ordine.map((anno) => ({ anno, righe: mappa.get(anno) ?? [] }));
 }
 
+function GraficoProfilo({ punti, metri, minuti }: { punti: LogEntry["profilo"]; metri: string; minuti: string }) {
+  const t = useT();
+  return (
+    <div className="relative mt-3 h-40 overflow-hidden rounded-xl border border-line bg-ink/50">
+      <CurvaProfilo punti={punti} />
+      <span className="absolute left-2 top-1 text-[10px] text-mist">0</span>
+      <span className="absolute bottom-1 left-2 text-[10px] text-mist">{metri ? `${metri} m` : t("profondità")}</span>
+      <span className="absolute bottom-1 right-2 text-[10px] text-mist">{minuti ? `${minuti} min` : ""}</span>
+    </div>
+  );
+}
+
 function CurvaProfilo({ punti }: { punti: LogEntry["profilo"] }) {
   const ordinati = [...punti].sort((a, b) => a.t - b.t);
   const minT = ordinati[0]?.t ?? 0;
@@ -1676,9 +1684,15 @@ function CurvaProfilo({ punti }: { punti: LogEntry["profilo"] }) {
       return `${x},${y}`;
     })
     .join(" ");
+  const area = [`0,36`, ...ordinati.map((punto) => {
+    const x = ((punto.t - minT) / (maxT - minT || 1)) * 100;
+    const y = 4 + (punto.d / maxD) * 32;
+    return `${x},${y}`;
+  }), `100,36`].join(" ");
   return (
-    <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full text-lagoon opacity-70" aria-hidden>
-      <polyline points={traccia} fill="none" stroke="currentColor" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full text-lagoon" aria-hidden>
+      <polygon points={area} fill="currentColor" opacity="0.2" />
+      <polyline points={traccia} fill="none" stroke="currentColor" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

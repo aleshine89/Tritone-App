@@ -46,10 +46,11 @@ export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo
 }
 
 export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
-  const letture = await ocr(dataUrl);
+  const src = await raddrizza(dataUrl);
+  const letture = await ocr(src);
   let migliore = unisciLetture(letture);
   let testoMigliore = letture[0] || "";
-  const cifre = await leggiCifre(dataUrl);
+  const cifre = await leggiCifre(src);
   const tempi = orariDelleLetture(letture);
   const fineGiaBuona = migliore.ora ? fineCompatibile(migliore.ora, [migliore.oraFine, ...tempi].filter(Boolean)) : "";
   if (cifre.ora && !fineGiaBuona) migliore = { ...migliore, ora: cifre.ora };
@@ -66,9 +67,59 @@ export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
   const minutiCalcolati = migliore.ora && migliore.oraFine ? minutiTra(migliore.ora, migliore.oraFine) : "";
   if (minutiCalcolati) migliore = { ...migliore, minuti: minutiCalcolati };
   if (migliore.profondita && migliore.media && Number(migliore.media) >= Number(migliore.profondita)) migliore = { ...migliore, media: "" };
-  const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(dataUrl, Number(migliore.minuti), Number(migliore.profondita)) : [];
+  if (!migliore.media && migliore.profondita) {
+    const mediaLetta = mediaDaMetri(letture, Number(migliore.profondita));
+    if (mediaLetta) migliore = { ...migliore, media: mediaLetta };
+  }
+  const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(src, Number(migliore.minuti), Number(migliore.profondita)) : [];
   const letto = punteggioLettura(migliore) > 0 || profilo.length > 1;
   return { ...migliore, testo: testoMigliore, profilo, letto };
+}
+
+function ruotaImmagine(img: HTMLImageElement, gradi: number): string {
+  const scambia = gradi % 180 !== 0;
+  const quadro = document.createElement("canvas");
+  quadro.width = scambia ? img.height : img.width;
+  quadro.height = scambia ? img.width : img.height;
+  const ctx = quadro.getContext("2d");
+  if (!ctx) return "";
+  ctx.translate(quadro.width / 2, quadro.height / 2);
+  ctx.rotate((gradi * Math.PI) / 180);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  return quadro.toDataURL("image/jpeg", 0.95);
+}
+
+async function raddrizza(dataUrl: string): Promise<string> {
+  const img = await carica(dataUrl);
+  if (!img || typeof document === "undefined") return dataUrl;
+  let scelta = dataUrl;
+  let meglio = -1;
+  for (const gradi of [0, 90, 180, 270]) {
+    const url = gradi === 0 ? dataUrl : ruotaImmagine(img, gradi);
+    if (!url) continue;
+    const cifre = await leggiCifre(url);
+    const prof = Number(cifre.profondita);
+    const punti = (cifre.ora ? 3 : 0) + (prof >= 10 && prof <= 80 ? 5 : prof >= 3 ? 1 : 0);
+    if (punti > meglio) {
+      meglio = punti;
+      scelta = url;
+    }
+    if (cifre.ora && prof >= 5 && prof <= 80) break;
+  }
+  return scelta;
+}
+
+function mediaDaMetri(testi: string[], massima: number): string {
+  const trovate: number[] = [];
+  for (const testo of testi) {
+    for (const match of testo.matchAll(/\b(\d{3})\s*m\b/gi)) {
+      if (match[1].endsWith("8")) continue;
+      const n = Number(`${match[1].slice(0, -1)}.${match[1].slice(-1)}`);
+      if (n >= 3 && n <= massima - 0.5) trovate.push(n);
+    }
+  }
+  if (!trovate.length) return "";
+  return Math.max(...trovate).toFixed(1);
 }
 
 function unisciLetture(testi: string[]): Omit<LetturaComputer, "profilo" | "letto" | "testo"> {
@@ -497,7 +548,7 @@ function zonaSchermo(image: ImageData): { x: number; y: number; w: number; h: nu
   const grezzoH = Math.min(height, (sy[1] + 1) * step) - grezzoY;
   const x = Math.max(0, grezzoX - Math.round(grezzoW * 0.04));
   const y = Math.max(0, grezzoY - Math.round(grezzoH * 0.06));
-  const x2 = Math.min(width, grezzoX + grezzoW + Math.round(grezzoW * 0.06));
+  const x2 = Math.min(width, grezzoX + grezzoW + Math.round(grezzoW * 0.14));
   const y2 = Math.min(height, grezzoY + grezzoH + Math.round(grezzoH * 0.24));
   const w = x2 - x;
   const h = y2 - y;
@@ -530,47 +581,70 @@ async function tracciaProfilo(dataUrl: string, minuti: number, massima: number):
   if (!ctx) return [];
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const lumi = new Float32Array(width * height);
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) lumi[p] = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
-  const bordo = (x: number, y: number) => {
-    if (y <= 0 || y >= height - 1) return 0;
-    return Math.abs(lumi[y * width + x] - lumi[(y - 1) * width + x]);
-  };
-  const colonne: number[][] = Array.from({ length: width }, () => []);
-  const righeConteggio = new Array<number>(height).fill(0);
-  for (let y = 1; y < height - 1; y += 1) {
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  let gialli = 0;
+  for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if (bordo(x, y) < 28) continue;
-      colonne[x].push(y);
-      righeConteggio[y] += 1;
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r <= 150 || g <= 120 || b >= 90 || r <= b + 60) continue;
+      gialli += 1;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
     }
   }
-  const sogliaGriglia = width * 0.35;
-  const griglia = righeConteggio.map((n) => n > sogliaGriglia);
-  const ys: number[] = [];
-  const xs: number[] = [];
-  for (let x = 0; x < width; x += 1) {
-    const utili = colonne[x].filter((y) => !griglia[y]);
-    if (utili.length < 1 || utili.length > height * 0.3) continue;
-    utili.sort((a, b) => a - b);
-    xs.push(x);
-    ys.push(utili[Math.floor(utili.length / 2)]);
+  if (gialli < 40 || maxX - minX < 40 || maxY - minY < 30) return [];
+  const x0 = minX + 6;
+  const x1 = maxX - 6;
+  const y0 = minY + 6;
+  const y1 = maxY - 6;
+  const grezzi: { x: number; y: number }[] = [];
+  for (let x = x0; x <= x1; x += 1) {
+    let meglio = 0;
+    let scelto = -1;
+    for (let y = y0; y <= y1; y += 1) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (b < 100) continue;
+      const bianco = Math.min(r, g, b) - Math.max(0, b - r) * 0.4;
+      if (bianco > meglio) {
+        meglio = bianco;
+        scelto = y;
+      }
+    }
+    if (scelto >= 0 && meglio > 90) grezzi.push({ x, y: scelto });
   }
-  if (xs.length < 20) return [];
-  const minX = xs[0];
-  const maxX = xs[xs.length - 1];
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  if (maxX - minX < 30 || maxY - minY < 8) return [];
-  const passo = Math.max(1, Math.floor(xs.length / 36));
+  if (grezzi.length < 30) return [];
+  const lisci = grezzi.map((punto, indice) => {
+    const finestra = grezzi.slice(Math.max(0, indice - 2), indice + 3).map((voce) => voce.y).sort((a, b) => a - b);
+    return { x: punto.x, y: finestra[Math.floor(finestra.length / 2)] };
+  });
+  const alto = Math.min(...lisci.map((punto) => punto.y));
+  const fondo = Math.max(...lisci.map((punto) => punto.y));
+  const sinistra = lisci[0].x;
+  const destra = lisci[lisci.length - 1].x;
+  if (destra - sinistra < 30 || fondo - alto < 8) return [];
+  const passo = Math.max(1, Math.floor(lisci.length / 40));
   const punti: PuntoProfilo[] = [];
-  for (let i = 0; i < xs.length; i += passo) {
-    const t = Math.round(((xs[i] - minX) / (maxX - minX)) * minuti);
-    const d = Math.round((((ys[i] - minY) / (maxY - minY)) * massima) * 10) / 10;
+  for (let i = 0; i < lisci.length; i += passo) {
+    const t = Math.round(((lisci[i].x - sinistra) / (destra - sinistra)) * minuti);
+    const d = Math.round((((lisci[i].y - y0) / Math.max(1, fondo - y0)) * massima) * 10) / 10;
     const ultimo = punti[punti.length - 1];
     if (ultimo && ultimo.t === t) ultimo.d = Math.max(ultimo.d, d);
     else punti.push({ t, d });
   }
+  if (punti.length > 1 && punti[0].t !== 0) punti.unshift({ t: 0, d: punti[0].d });
+  const fine = punti[punti.length - 1];
+  if (fine && fine.t !== minuti) punti.push({ t: minuti, d: fine.d });
   return punti.length > 1 ? punti : [];
 }
 
