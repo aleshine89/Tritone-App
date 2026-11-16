@@ -788,7 +788,6 @@ function NavLink({
   );
 }
 
-
 function ProfileChip({ gate }: { gate: boolean }) {
   const t = useT();
   const frame = useFondale();

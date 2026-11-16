@@ -71,7 +71,7 @@ export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
     const mediaLetta = mediaDaMetri(letture, Number(migliore.profondita));
     if (mediaLetta) migliore = { ...migliore, media: mediaLetta };
   }
-  const profilo = migliore.minuti && migliore.profondita ? await tracciaProfilo(src, Number(migliore.minuti), Number(migliore.profondita)) : [];
+  const profilo = await tracciaProfilo(src, Number(migliore.minuti) || 0, Number(migliore.profondita) || 0);
   const letto = punteggioLettura(migliore) > 0 || profilo.length > 1;
   return { ...migliore, testo: testoMigliore, profilo, letto };
 }
@@ -86,7 +86,7 @@ function ruotaImmagine(img: HTMLImageElement, gradi: number): string {
   ctx.translate(quadro.width / 2, quadro.height / 2);
   ctx.rotate((gradi * Math.PI) / 180);
   ctx.drawImage(img, -img.width / 2, -img.height / 2);
-  return quadro.toDataURL("image/jpeg", 0.95);
+  return quadro.toDataURL("image/jpeg", 0.92);
 }
 
 async function raddrizza(dataUrl: string): Promise<string> {
@@ -569,23 +569,311 @@ function fasciaBlu(conteggi: number[]): [number, number] | null {
 }
 
 async function tracciaProfilo(dataUrl: string, minuti: number, massima: number): Promise<PuntoProfilo[]> {
-  if (typeof document === "undefined" || minuti < 1 || massima <= 0) return [];
+  if (typeof document === "undefined") return [];
+  if (minuti < 1) minuti = 1;
+  if (massima <= 0) massima = 1;
   const img = await carica(dataUrl);
   if (!img) return [];
   const lunga = Math.max(img.width, img.height);
-  const scale = lunga > 900 ? 900 / lunga : 1;
+  const scale = lunga > 2200 ? 2200 / lunga : 1;
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(img.width * scale));
   canvas.height = Math.max(1, Math.round(img.height * scale));
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return [];
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  let minX = width;
-  let minY = height;
-  let maxX = 0;
-  let maxY = 0;
-  let gialli = 0;
+  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const box = riquadroGiallo(frame);
+  if (box) {
+    const nelGiallo = tracciaNelGiallo(frame, box, minuti, massima);
+    if (nelGiallo.length > 8) return nelGiallo;
+  }
+  return tracciaTft(img, minuti, massima);
+}
+
+function tracciaNelGiallo(frame: ImageData, box: { x: number; y: number; w: number; h: number }, minuti: number, massima: number): PuntoProfilo[] {
+  const { data, width } = frame;
+  const x0 = box.x;
+  const y0 = box.y;
+  const bw = box.w;
+  const bh = box.h;
+  const griglia = new Uint8Array(bh);
+  for (let y = 0; y < bh; y += 1) {
+    let blu = 0;
+    for (let x = 0; x < bw; x += 2) {
+      const i = ((y0 + y) * width + (x0 + x)) * 4;
+      const r = data[i];
+      const b = data[i + 2];
+      if (b > r + 15 && b > 90) blu += 1;
+    }
+    if (blu > bw * 0.2) {
+      for (let yy = Math.max(0, y - 2); yy <= Math.min(bh - 1, y + 2); yy += 1) griglia[yy] = 1;
+    }
+  }
+  const grezzi: { x: number; y: number }[] = [];
+  for (let x = 0; x < bw; x += 1) {
+    let meglio = 0;
+    let scelto = -1;
+    for (let y = 0; y < bh; y += 1) {
+      if (griglia[y]) continue;
+      const i = ((y0 + y) * width + (x0 + x)) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r < 140 || g < 150 || b < 130) continue;
+      if (b > r + 45 && r < 185) continue;
+      const valore = Math.min(r, g, b);
+      if (valore > meglio) {
+        meglio = valore;
+        scelto = y;
+      }
+    }
+    if (scelto < 0 || meglio <= 145 || scelto > bh * 0.88 || scelto < bh * 0.05) continue;
+    grezzi.push({ x, y: scelto });
+  }
+  if (grezzi.length < 40) return [];
+  let valle = 0;
+  for (let i = 1; i < grezzi.length; i += 1) {
+    if (grezzi[i].x > bw * 0.7) continue;
+    if (grezzi[i].y > grezzi[valle].y) valle = i;
+  }
+  const corretti = grezzi.slice(0, valle + 1);
+  let quota = grezzi[valle].y;
+  for (let x = grezzi[valle].x + 1; x < bw; x += 1) {
+    let scelto = -1;
+    const da = Math.max(0, quota - 18);
+    const a = Math.min(bh - 1, quota + 4);
+    for (let y = da; y <= a; y += 1) {
+      const i = ((y0 + y) * width + (x0 + x)) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r < 105 || g < 120 || b < 100) continue;
+      if (b > r + 55 && r < 160) continue;
+      scelto = y;
+      break;
+    }
+    if (scelto < 0) continue;
+    quota = scelto;
+    corretti.push({ x, y: scelto });
+  }
+  const lisci = corretti.map((punto, indice) => {
+    const finestra = corretti.slice(Math.max(0, indice - 12), indice + 13).map((voce) => voce.y).sort((a, b) => a - b);
+    return { x: punto.x, y: finestra[Math.floor(finestra.length / 2)] };
+  });
+  let taglio = lisci.length;
+  const alto = Math.min(...lisci.map((punto) => punto.y));
+  let vistoAlto = false;
+  for (let i = 0; i < lisci.length; i += 1) {
+    if (lisci[i].y < bh * 0.22) vistoAlto = true;
+    if (vistoAlto && i > lisci.length * 0.6 && lisci[i].y > alto + bh * 0.25) {
+      taglio = i;
+      break;
+    }
+  }
+  const utili = lisci.slice(0, taglio);
+  let fine = utili.length;
+  while (fine > 8 && utili[fine - 1].y < bh * 0.08 && utili[fine - 2].y < bh * 0.08) fine -= 1;
+  const curva = utili.slice(0, Math.max(fine, 1));
+  if (curva.length < 30) return [];
+  const fondo = Math.max(...curva.map((punto) => punto.y));
+  const sinistraX = curva[0].x;
+  const destraX = curva[curva.length - 1].x;
+  if (destraX - sinistraX < bw * 0.35 || fondo < bh * 0.2) return [];
+  const passo = Math.max(1, Math.floor(curva.length / 42));
+  const punti: PuntoProfilo[] = [];
+  for (let i = 0; i < curva.length; i += passo) {
+    const t = Math.round(((curva[i].x - sinistraX) / (destraX - sinistraX)) * minuti);
+    const d = Math.round(((curva[i].y / fondo) * massima) * 10) / 10;
+    const ultimo = punti[punti.length - 1];
+    if (ultimo && ultimo.t === t) ultimo.d = d;
+    else punti.push({ t, d });
+  }
+  return punti.length > 8 ? punti : [];
+}
+
+function tracciaTft(img: HTMLImageElement, minuti: number, massima: number): PuntoProfilo[] {
+  const lunga = Math.max(img.width, img.height);
+  const scale = lunga > 1000 ? 1000 / lunga : 1;
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return [];
+  ctx.drawImage(img, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const ink = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const p = (y * width + x) * 4;
+      const r = data[p];
+      const g = data[p + 1];
+      const b = data[p + 2];
+      const alto = Math.max(r, g, b);
+      const basso = Math.min(r, g, b);
+      if (alto - basso > 32 && alto > 65) ink[y * width + x] = 1;
+      else if (basso > 160 && alto - basso < 50 && lineaBianca(data, width, height, x, y, basso)) ink[y * width + x] = 1;
+    }
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = y * width + x;
+      if (!ink[i] && ink[i - width] && ink[i + width]) ink[i] = 1;
+    }
+  }
+  let lavoro = ink;
+  for (let tentativo = 0; tentativo < 3; tentativo += 1) {
+    const curva = curvaInchiostro(lavoro, width, height);
+    if (!curva) return [];
+    if (profiloValido(curva.ys, curva.xs, width, height)) return campionaCurva(curva.xs, curva.ys, minuti, massima);
+    const prossimo = lavoro.slice();
+    for (let i = 0; i < curva.xs.length; i += 1) {
+      const x = curva.xs[i];
+      const y = curva.ys[i];
+      for (let yy = Math.max(0, y - 3); yy < Math.min(height, y + 4); yy += 1) prossimo[yy * width + x] = 0;
+    }
+    lavoro = prossimo;
+  }
+  return [];
+}
+
+function lineaBianca(data: Uint8ClampedArray, width: number, height: number, x: number, y: number, basso: number): boolean {
+  for (const dy of [-5, -4, 4, 5]) {
+    const yy = y + dy;
+    if (yy < 0 || yy >= height) continue;
+    const p = (yy * width + x) * 4;
+    if ((data[p] + data[p + 1] + data[p + 2]) / 3 < basso - 45) return true;
+  }
+  return false;
+}
+
+function curvaInchiostro(ink: Uint8Array, width: number, height: number): { xs: number[]; ys: number[] } | null {
+  const colonna = new Int16Array(width);
+  colonna.fill(-1);
+  for (let x = 0; x < width; x += 1) {
+    let y = 0;
+    let bestTop = -1;
+    let bestH = 0;
+    let ultimo = -1;
+    while (y < height) {
+      if (!ink[y * width + x]) {
+        y += 1;
+        continue;
+      }
+      const y0 = y;
+      while (y < height && ink[y * width + x]) y += 1;
+      const h = y - y0;
+      if (h > bestH) {
+        bestH = h;
+        bestTop = y0;
+      }
+      ultimo = y0;
+    }
+    if (bestTop < 0) continue;
+    const pieno = bestTop < height * 0.04 && bestTop + bestH > height * 0.92;
+    colonna[x] = bestH >= 8 && !pieno ? bestTop : ultimo;
+  }
+  let migliore: [number, number] | null = null;
+  let inizio = -1;
+  let buco = 0;
+  for (let x = 0; x <= width; x += 1) {
+    const acceso = x < width && colonna[x] >= 0;
+    if (acceso) {
+      if (inizio < 0) inizio = x;
+      buco = 0;
+    } else if (inizio >= 0) {
+      buco += 1;
+      if (buco > 12 || x === width) {
+        const fine = x - buco;
+        if (!migliore || fine - inizio > migliore[1] - migliore[0]) migliore = [inizio, fine];
+        inizio = -1;
+        buco = 0;
+      }
+    }
+  }
+  if (!migliore || migliore[1] - migliore[0] < width * 0.18) return null;
+  const xs: number[] = [];
+  const grezzi: number[] = [];
+  let last = -1;
+  for (let x = migliore[0]; x < migliore[1]; x += 1) {
+    let y = colonna[x];
+    if (y < 0) {
+      if (last >= 0) {
+        xs.push(x);
+        grezzi.push(last);
+      }
+      continue;
+    }
+    if (last >= 0 && Math.abs(y - last) > 26) {
+      let alt = -1;
+      const da = Math.max(0, last - 20);
+      const a = Math.min(height, last + 20);
+      for (let yy = da; yy < a; yy += 1) {
+        if (ink[yy * width + x] && (alt < 0 || Math.abs(yy - last) < Math.abs(alt - last))) alt = yy;
+      }
+      y = alt >= 0 ? alt : last;
+    }
+    xs.push(x);
+    grezzi.push(y);
+    last = y;
+  }
+  if (grezzi.length < 25) return null;
+  const ys = grezzi.map((_, indice) => {
+    const finestra = grezzi.slice(Math.max(0, indice - 8), indice + 9).sort((a, b) => a - b);
+    return finestra[Math.floor(finestra.length / 2)];
+  });
+  return { xs, ys };
+}
+
+function profiloValido(ys: number[], xs: number[], width: number, height: number): boolean {
+  const n = ys.length;
+  if (n < 25) return false;
+  const span = xs[n - 1] - xs[0];
+  let yMax = ys[0];
+  let deepI = 0;
+  for (let i = 1; i < n; i += 1) {
+    if (ys[i] > yMax) {
+      yMax = ys[i];
+      deepI = i;
+    }
+  }
+  const yMin = Math.min(...ys);
+  const relief = yMax - yMin;
+  const bordo = Math.max(4, Math.floor(n / 10));
+  const estremi = Math.min(mediana(ys.slice(0, bordo)), mediana(ys.slice(n - bordo)));
+  return span >= width * 0.2 && relief >= Math.max(12, height * 0.04) && yMax - estremi >= relief * 0.32 && deepI > n * 0.04 && deepI < n * 0.96;
+}
+
+function campionaCurva(xs: number[], ys: number[], minuti: number, massima: number): PuntoProfilo[] {
+  let cima = ys[0];
+  let fondo = ys[0];
+  for (const y of ys) {
+    if (y < cima) cima = y;
+    if (y > fondo) fondo = y;
+  }
+  if (fondo - cima < 8) return [];
+  const sinistra = xs[0];
+  const destra = xs[xs.length - 1];
+  if (destra <= sinistra) return [];
+  const passo = Math.max(1, Math.floor(ys.length / 42));
+  const punti: PuntoProfilo[] = [];
+  for (let i = 0; i < ys.length; i += passo) {
+    const t = Math.round(((xs[i] - sinistra) / (destra - sinistra)) * minuti);
+    const d = Math.round((((ys[i] - cima) / (fondo - cima)) * massima) * 10) / 10;
+    const ultimo = punti[punti.length - 1];
+    if (ultimo && ultimo.t === t) ultimo.d = d;
+    else punti.push({ t, d });
+  }
+  return punti.length > 8 ? punti : [];
+}
+
+function riquadroGiallo(image: ImageData): { x: number; y: number; w: number; h: number } | null {
+  const { data, width, height } = image;
+  const colonne = new Array<number>(width).fill(0);
+  const righe = new Array<number>(height).fill(0);
+  let n = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const i = (y * width + x) * 4;
@@ -593,59 +881,29 @@ async function tracciaProfilo(dataUrl: string, minuti: number, massima: number):
       const g = data[i + 1];
       const b = data[i + 2];
       if (r <= 150 || g <= 120 || b >= 90 || r <= b + 60) continue;
-      gialli += 1;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
+      colonne[x] += 1;
+      righe[y] += 1;
+      n += 1;
     }
   }
-  if (gialli < 40 || maxX - minX < 40 || maxY - minY < 30) return [];
-  const x0 = minX + 6;
-  const x1 = maxX - 6;
-  const y0 = minY + 6;
-  const y1 = maxY - 6;
-  const grezzi: { x: number; y: number }[] = [];
-  for (let x = x0; x <= x1; x += 1) {
-    let meglio = 0;
-    let scelto = -1;
-    for (let y = y0; y <= y1; y += 1) {
-      const i = (y * width + x) * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      if (b < 100) continue;
-      const bianco = Math.min(r, g, b) - Math.max(0, b - r) * 0.4;
-      if (bianco > meglio) {
-        meglio = bianco;
-        scelto = y;
-      }
-    }
-    if (scelto >= 0 && meglio > 90) grezzi.push({ x, y: scelto });
-  }
-  if (grezzi.length < 30) return [];
-  const lisci = grezzi.map((punto, indice) => {
-    const finestra = grezzi.slice(Math.max(0, indice - 2), indice + 3).map((voce) => voce.y).sort((a, b) => a - b);
-    return { x: punto.x, y: finestra[Math.floor(finestra.length / 2)] };
-  });
-  const alto = Math.min(...lisci.map((punto) => punto.y));
-  const fondo = Math.max(...lisci.map((punto) => punto.y));
-  const sinistra = lisci[0].x;
-  const destra = lisci[lisci.length - 1].x;
-  if (destra - sinistra < 30 || fondo - alto < 8) return [];
-  const passo = Math.max(1, Math.floor(lisci.length / 40));
-  const punti: PuntoProfilo[] = [];
-  for (let i = 0; i < lisci.length; i += passo) {
-    const t = Math.round(((lisci[i].x - sinistra) / (destra - sinistra)) * minuti);
-    const d = Math.round((((lisci[i].y - y0) / Math.max(1, fondo - y0)) * massima) * 10) / 10;
-    const ultimo = punti[punti.length - 1];
-    if (ultimo && ultimo.t === t) ultimo.d = Math.max(ultimo.d, d);
-    else punti.push({ t, d });
-  }
-  if (punti.length > 1 && punti[0].t !== 0) punti.unshift({ t: 0, d: punti[0].d });
-  const fine = punti[punti.length - 1];
-  if (fine && fine.t !== minuti) punti.push({ t: minuti, d: fine.d });
-  return punti.length > 1 ? punti : [];
+  const fascia = (conteggi: number[]) => {
+    const tetto = Math.max(...conteggi, 0);
+    if (tetto < 4) return null;
+    const soglia = Math.max(3, tetto * 0.25);
+    let inizio = 0;
+    let fine = conteggi.length - 1;
+    while (inizio < fine && conteggi[inizio] < soglia) inizio += 1;
+    while (fine > inizio && conteggi[fine] < soglia) fine -= 1;
+    return fine - inizio > 20 ? [inizio, fine] as const : null;
+  };
+  const sx = fascia(colonne);
+  const sy = fascia(righe);
+  if (!sx || !sy || n < 80) return null;
+  const x = sx[0] + 4;
+  const y = sy[0] + 4;
+  const w = Math.max(10, sx[1] - sx[0] - 8);
+  const h = Math.max(10, sy[1] - sy[0] - 8);
+  return { x, y, w, h };
 }
 
 const MODELLI_CIFRE: { segno: string; griglia: number[] }[] = [
