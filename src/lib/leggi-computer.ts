@@ -11,10 +11,11 @@ export type LetturaComputer = {
   ossigeno: string;
   testo: string;
   profilo: PuntoProfilo[];
+  grafico: string;
   letto: boolean;
 };
 
-export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo" | "letto" | "testo"> {
+export function interpretaSchermo(testo: string): Omit<LetturaComputer, "profilo" | "grafico" | "letto" | "testo"> {
   const piatto = normalizza(testo);
   let data = dataDi(piatto);
   let ora = oraVicino(piatto, /[i1l]n[i1l]z[i1l]?[o0a]|start|entry|entrata|discesa/i);
@@ -72,8 +73,9 @@ export async function leggiComputer(dataUrl: string): Promise<LetturaComputer> {
     if (mediaLetta) migliore = { ...migliore, media: mediaLetta };
   }
   const profilo = await tracciaProfilo(src, Number(migliore.minuti) || 0, Number(migliore.profondita) || 0);
-  const letto = punteggioLettura(migliore) > 0 || profilo.length > 1;
-  return { ...migliore, testo: testoMigliore, profilo, letto };
+  const grafico = await ritagliaGrafico(src);
+  const letto = punteggioLettura(migliore) > 0 || profilo.length > 1 || grafico.length > 0;
+  return { ...migliore, testo: testoMigliore, profilo: grafico ? [] : profilo, grafico, letto };
 }
 
 function ruotaImmagine(img: HTMLImageElement, gradi: number): string {
@@ -122,7 +124,7 @@ function mediaDaMetri(testi: string[], massima: number): string {
   return Math.max(...trovate).toFixed(1);
 }
 
-function unisciLetture(testi: string[]): Omit<LetturaComputer, "profilo" | "letto" | "testo"> {
+function unisciLetture(testi: string[]): Omit<LetturaComputer, "profilo" | "grafico" | "letto" | "testo"> {
   let unito = interpretaSchermo("");
   for (const testo of testi) {
     const campi = interpretaSchermo(testo);
@@ -867,6 +869,101 @@ function campionaCurva(xs: number[], ys: number[], minuti: number, massima: numb
     else punti.push({ t, d });
   }
   return punti.length > 8 ? punti : [];
+}
+
+async function ritagliaGrafico(dataUrl: string): Promise<string> {
+  const img = await carica(dataUrl);
+  if (!img || typeof document === "undefined") return "";
+  const lunga = Math.max(img.width, img.height);
+  const scale = lunga > 1400 ? 1400 / lunga : 1;
+  const dw = Math.max(1, Math.round(img.width * scale));
+  const dh = Math.max(1, Math.round(img.height * scale));
+  const sonda = document.createElement("canvas");
+  sonda.width = dw;
+  sonda.height = dh;
+  const sx = sonda.getContext("2d", { willReadFrequently: true });
+  if (!sx) return "";
+  sx.drawImage(img, 0, 0, dw, dh);
+  const frame = sx.getImageData(0, 0, dw, dh);
+  const trovato = riquadroGiallo(frame) || riquadroSchermoTft(frame);
+  if (!trovato || trovato.w < 36 || trovato.h < 28) return "";
+  const x = Math.max(0, Math.round((trovato.x - 8) / scale));
+  const y = Math.max(0, Math.round((trovato.y - 8) / scale));
+  const w = Math.min(img.width - x, Math.round((trovato.w + 16) / scale));
+  const h = Math.min(img.height - y, Math.round((trovato.h + 16) / scale));
+  if (w < 40 || h < 30) return "";
+  const crop = document.createElement("canvas");
+  crop.width = w;
+  crop.height = h;
+  const cx = crop.getContext("2d");
+  if (!cx) return "";
+  cx.drawImage(img, x, y, w, h, 0, 0, w, h);
+  return jpegGrafico(crop);
+}
+
+function jpegGrafico(canvas: HTMLCanvasElement): string {
+  const maxW = 960;
+  let sorgente = canvas;
+  if (canvas.width > maxW) {
+    const scala = maxW / canvas.width;
+    const ridotto = document.createElement("canvas");
+    ridotto.width = maxW;
+    ridotto.height = Math.max(1, Math.round(canvas.height * scala));
+    const ctx = ridotto.getContext("2d");
+    if (!ctx) return "";
+    ctx.drawImage(canvas, 0, 0, ridotto.width, ridotto.height);
+    sorgente = ridotto;
+  }
+  let qualita = 0.82;
+  let url = sorgente.toDataURL("image/jpeg", qualita);
+  while (url.length > 170_000 && qualita > 0.46) {
+    qualita -= 0.08;
+    url = sorgente.toDataURL("image/jpeg", qualita);
+  }
+  return url.startsWith("data:image/jpeg") && url.length < 200_000 ? url : "";
+}
+
+function riquadroSchermoTft(image: ImageData): { x: number; y: number; w: number; h: number } | null {
+  const { data, width, height } = image;
+  const colonne = new Int32Array(width);
+  const righe = new Int32Array(height);
+  let n = 0;
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const p = (y * width + x) * 4;
+      const r = data[p];
+      const g = data[p + 1];
+      const b = data[p + 2];
+      const mx = Math.max(r, g, b);
+      const mn = Math.min(r, g, b);
+      if (mx - mn < 36 || mx < 80 || mn > 210) continue;
+      colonne[x] += 1;
+      righe[y] += 1;
+      n += 1;
+    }
+  }
+  if (n < 70) return null;
+  const fascia = (conteggi: Int32Array, totale: number) => {
+    let tetto = 0;
+    for (let i = 0; i < totale; i += 1) if (conteggi[i] > tetto) tetto = conteggi[i];
+    if (tetto < 4) return null;
+    const soglia = Math.max(3, tetto * 0.22);
+    let inizio = 0;
+    let fine = totale - 1;
+    while (inizio < fine && conteggi[inizio] < soglia) inizio += 1;
+    while (fine > inizio && conteggi[fine] < soglia) fine -= 1;
+    return fine - inizio > 28 ? [inizio, fine] as const : null;
+  };
+  const sx = fascia(colonne, width);
+  const sy = fascia(righe, height);
+  if (!sx || !sy) return null;
+  const margine = Math.round((sy[1] - sy[0]) * 0.18);
+  const x = sx[0];
+  const y = Math.max(0, sy[0] - margine);
+  const w = Math.max(10, sx[1] - sx[0]);
+  const h = Math.min(height - y, sy[1] - y + 6);
+  if (w < width * 0.18 || h < height * 0.08) return null;
+  return { x, y, w, h };
 }
 
 function riquadroGiallo(image: ImageData): { x: number; y: number; w: number; h: number } | null {

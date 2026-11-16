@@ -73,6 +73,7 @@ const empty = {
   condivisaDa: "",
   decompressione: "" as "" | "si" | "no",
   profilo: [] as LogEntry["profilo"],
+  profiloFoto: "",
   oraFine: "",
   centro: "",
   guidaNome: "",
@@ -122,7 +123,8 @@ function unisciPagine(base: LetturaComputer, aggiunta: LetturaComputer): Lettura
     media: tieni(base.media, aggiunta.media),
     temperatura: tieni(base.temperatura, aggiunta.temperatura),
     ossigeno: tieni(base.ossigeno, aggiunta.ossigeno),
-    profilo: base.profilo.length > 1 ? base.profilo : aggiunta.profilo,
+    profilo: base.grafico ? [] : base.profilo.length > 1 ? base.profilo : aggiunta.profilo,
+    grafico: base.grafico || aggiunta.grafico,
     testo: base.testo || aggiunta.testo,
     letto: true,
   };
@@ -236,7 +238,8 @@ function Logbook() {
         media: unito.media || current.media,
         temperatura: unito.temperatura || current.temperatura,
         ossigeno: unito.ossigeno || current.ossigeno,
-        profilo: unito.profilo.length > 1 ? unito.profilo : current.profilo,
+        profilo: unito.grafico ? [] : unito.profilo.length > 1 ? unito.profilo : current.profilo,
+        profiloFoto: unito.grafico || current.profiloFoto,
       }));
       const pezzi = [
         unito.data ? t("data") : "",
@@ -247,7 +250,7 @@ function Logbook() {
         unito.media ? t("media") : "",
         unito.temperatura ? t("temperatura") : "",
         unito.ossigeno ? t("ossigeno") : "",
-        unito.profilo.length > 1 ? t("profilo") : "",
+        unito.grafico || unito.profilo.length > 1 ? t("profilo") : "",
       ].filter(Boolean);
       setScanMsg(
         files.length > 1
@@ -711,7 +714,7 @@ function Logbook() {
                   </div>
                 ) : null}
                 {scanMsg ? <p className="mt-2 text-sm text-mist">{scanMsg}</p> : null}
-                {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
+                {draft.profiloFoto || draft.profilo.length > 1 ? <GraficoProfilo foto={draft.profiloFoto} punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
               </div>
             ) : null}
             <h3 className="mt-5 text-sm font-medium uppercase tracking-wide text-lagoon">{t("Obbligatori")}</h3>
@@ -828,7 +831,7 @@ function Logbook() {
                       }}
                     />
                   </label>
-                  {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
+                  {draft.profiloFoto || draft.profilo.length > 1 ? <GraficoProfilo foto={draft.profiloFoto} punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
                   {fileScelte ? (
                     <ul className="mt-3 grid gap-2">
                       {fileScelte.map((riga, index) => (
@@ -982,7 +985,7 @@ function Logbook() {
                         <span>{deco ? "DECO" : "REC"}</span>
                       </span>
                       <span className="relative flex min-w-0 flex-1 flex-col justify-center px-3">
-                        {row.profilo.length > 1 ? <CurvaProfilo punti={row.profilo} /> : null}
+                        {row.profiloFoto ? <img src={row.profiloFoto} alt="" className="pointer-events-none absolute inset-y-1 right-16 w-24 object-contain" /> : row.profilo.length > 1 ? <CurvaProfilo punti={row.profilo} /> : null}
                         <span className="relative truncate text-sm font-medium">{row.punto || nomeSito(row.localita, t)}</span>
                         <span className="relative text-sm text-mist">{formatDay(row.data)}{row.ora ? ` ${row.ora}` : ""}</span>
                         {row.guidaFirma ? <span className="relative text-xs text-lagoon">{t("Validata")}</span> : null}
@@ -1466,6 +1469,7 @@ function VistaImmersione({
     note: string;
     decompressione: "" | "si" | "no";
     profilo: LogEntry["profilo"];
+    profiloFoto: string;
     oraFine: string;
     centro: string;
     guidaNome: string;
@@ -1545,7 +1549,7 @@ function VistaImmersione({
           </div>
         ) : null}
       </dl>
-      {draft.profilo.length > 1 ? <GraficoProfilo punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
+      {draft.profiloFoto || draft.profilo.length > 1 ? <GraficoProfilo foto={draft.profiloFoto} punti={draft.profilo} metri={draft.profondita} minuti={draft.minuti} /> : null}
       {draft.guidaFirma ? (
         <div className="mt-4">
           <p className="mb-1 text-xs text-lagoon">{t("Validata da {nome}", { nome: draft.guidaNome || t("la guida") })}</p>
@@ -1660,8 +1664,15 @@ function gruppiAnno(rows: LogEntry[]): { anno: string; righe: LogEntry[] }[] {
   return ordine.map((anno) => ({ anno, righe: mappa.get(anno) ?? [] }));
 }
 
-function GraficoProfilo({ punti, metri, minuti }: { punti: LogEntry["profilo"]; metri: string; minuti: string }) {
+function GraficoProfilo({ foto, punti, metri, minuti }: { foto?: string; punti: LogEntry["profilo"]; metri: string; minuti: string }) {
   const t = useT();
+  if (foto) {
+    return (
+      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-black">
+        <img src={foto} alt={t("Profilo dell'immersione")} className="mx-auto block max-h-64 w-full object-contain" />
+      </div>
+    );
+  }
   return (
     <div className="relative mt-3 h-40 overflow-hidden rounded-xl border border-line bg-ink/50">
       <CurvaProfilo punti={punti} />

@@ -2850,6 +2850,7 @@ export type LogEntry = {
   condivisaDa: string;
   decompressione: "" | "si" | "no";
   profilo: PuntoProfilo[];
+  profiloFoto: string;
   oraFine: string;
   centro: string;
   guidaNome: string;
@@ -2926,6 +2927,7 @@ function readLog(input: unknown): Omit<LogEntry, "id" | "foto" | "voce" | "condi
     sottomuta: asText(raw.sottomuta).trim().slice(0, 80),
     pesi: num("pesi", 40),
     profilo: profiloDi(raw.profilo),
+    profiloFoto: fotoProfilo(raw.profiloFoto),
   };
 }
 
@@ -2979,7 +2981,8 @@ function toLog(row: {
   viaggio_gruppo_id: number | null;
   convalida_guida: string | null;
 }): LogEntry {
-  const profilo = profiloDi(profiloJson(row.dive_profile));
+  const pacchetto = pacchettoProfilo(row.dive_profile);
+  const profilo = profiloDi(pacchetto.punti);
   return {
     id: Number(row.id),
     data: row.dive_date.slice(0, 10),
@@ -3001,6 +3004,7 @@ function toLog(row: {
     condivisaDa: row.condivisa_da ?? "",
     decompressione: row.decompressione === "si" || row.decompressione === "no" ? row.decompressione : "",
     profilo,
+    profiloFoto: pacchetto.foto,
     oraFine: (row.ora_fine ?? "").slice(0, 5),
     centro: row.centro ?? "",
     guidaNome: row.guida_nome ?? "",
@@ -3131,7 +3135,7 @@ export const saveLogbook = createServerFn({ method: "POST" })
             decompressione = ${data.decompressione},
             dive_time = ${data.ora},
             ora_fine = ${data.oraFine},
-            dive_profile = ${JSON.stringify(data.profilo)},
+            dive_profile = ${JSON.stringify(salvaProfilo(data.profilo, data.profiloFoto))},
             centro = ${data.centro},
             guida_nome = ${data.guidaNome},
             profondita_prevista = ${data.profonditaPrevista},
@@ -3160,7 +3164,7 @@ export const saveLogbook = createServerFn({ method: "POST" })
         ${context.userId}, ${data.data}, ${data.localita}, ${data.punto}, ${data.profondita},
         ${data.minuti}, ${data.buddy}, ${data.miscela}, ${data.ossigeno}, ${data.temperatura},
         ${data.visibilita}, ${data.note}, ${data.lat}, ${data.lng}, ${data.decompressione},
-        ${data.ora}, ${data.oraFine}, ${JSON.stringify(data.profilo)}, ${data.centro}, ${data.guidaNome}, ${data.guidaFirma}, ${data.profonditaPrevista}, ${data.autorespiratore}, ${data.brevetto},
+        ${data.ora}, ${data.oraFine}, ${JSON.stringify(salvaProfilo(data.profilo, data.profiloFoto))}, ${data.centro}, ${data.guidaNome}, ${data.guidaFirma}, ${data.profonditaPrevista}, ${data.autorespiratore}, ${data.brevetto},
         ${data.media}, ${data.acqua}, ${data.muta}, ${data.sottomuta}, ${data.pesi}
       )
       returning id
@@ -3760,6 +3764,26 @@ function coordMorbida(value: unknown, min: number, max: number): string {
   }
 }
 
+function fotoProfilo(value: unknown): string {
+  const text = typeof value === "string" ? value : "";
+  return text.startsWith("data:image/jpeg;base64,") && text.length < 220_000 ? text : "";
+}
+
+function pacchettoProfilo(value: string): { punti: unknown; foto: string } {
+  const parsed = profiloJson(value);
+  if (Array.isArray(parsed)) return { punti: parsed, foto: "" };
+  if (parsed && typeof parsed === "object") {
+    const obj = parsed as { punti?: unknown; foto?: unknown };
+    return { punti: obj.punti, foto: fotoProfilo(obj.foto) };
+  }
+  return { punti: [], foto: "" };
+}
+
+function salvaProfilo(punti: PuntoProfilo[], foto: string): PuntoProfilo[] | { punti: PuntoProfilo[]; foto: string } {
+  const pulita = fotoProfilo(foto);
+  return pulita ? { punti, foto: pulita } : punti;
+}
+
 function profiloDi(value: unknown): PuntoProfilo[] {
   if (!Array.isArray(value)) return [];
   const punti: PuntoProfilo[] = [];
@@ -3806,7 +3830,7 @@ function rigaUddf(row: {
     ossigeno: row.oxygen ?? "",
     temperatura: row.temp_c ?? "",
     note: row.notes ?? "",
-    profilo: profiloDi(profiloJson(row.dive_profile)),
+    profilo: profiloDi(pacchettoProfilo(row.dive_profile).punti),
   };
 }
 
